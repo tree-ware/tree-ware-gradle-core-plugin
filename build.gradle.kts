@@ -24,6 +24,7 @@ tasks.withType<KotlinCompile> {
 dependencies {
     implementation(libs.treeWareKotlinCore)
     implementation(kotlin("stdlib"))
+    implementation("org.jetbrains.kotlin:kotlin-gradle-plugin:1.7.22")
 
     testImplementation(kotlin("test"))
 }
