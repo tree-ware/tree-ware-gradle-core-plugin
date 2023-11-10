@@ -9,19 +9,23 @@ import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
 
 private const val TREE_WARE_TASK_GROUP = "tree-ware"
 
+typealias ConfigureSources = (project: Project, sourceSetName: String, sources: SourceDirectorySet) -> Unit
 typealias ConfigureTask<T> = (task: T, sourceSetName: String, resources: SourceDirectorySet) -> Unit
 
 class TreeWareCorePlugin : Plugin<Project> {
     override fun apply(project: Project) {
-        registerTasks(project, "generateDiagrams", GenerateDiagramsTask::class.java) { task, sourceSetName, resources ->
+        registerTasks(
+            project, "generateDiagrams", GenerateDiagramsTask::class.java, null
+        ) { task, sourceSetName, resources ->
+            val outputDirectory = getMetaModelDiagramsOutputDirectory(project, sourceSetName)
             task.resources.set(resources)
-            task.outputDirectory.set(
-                project.layout.buildDirectory.dir("$META_MODEL_DIAGRAMS_OUTPUT_DIRECTORY/$sourceSetName")
-            )
+            task.outputDirectory.set(outputDirectory)
         }
 
-        registerTasks(project, "generateKotlin", GenerateKotlinTask::class.java) { task, sourceSetName, resources ->
-            val outputDirectory = project.layout.buildDirectory.dir("$META_MODEL_KOTLIN_OUTPUT_DIRECTORY/$sourceSetName/kotlin")
+        registerTasks(
+            project, "generateKotlin", GenerateKotlinTask::class.java, ::addGeneratedKotlinToSourceSet
+        ) { task, sourceSetName, resources ->
+            val outputDirectory = getMetaModelKotlinOutputDirectory(project, sourceSetName)
             task.resources.set(resources)
             task.outputDirectory.set(outputDirectory)
         }
@@ -31,6 +35,7 @@ class TreeWareCorePlugin : Plugin<Project> {
         project: Project,
         taskName: String,
         taskClass: Class<T>,
+        configureSources: ConfigureSources?,
         configureTask: ConfigureTask<T>
     ) {
         // NOTE: the umbrella-task is being created rather than registered in order to get a Task rather than a
@@ -41,6 +46,7 @@ class TreeWareCorePlugin : Plugin<Project> {
         // Register tasks for Java/Kotlin plugin sourceSets
         val sourceSets = project.extensions.findByType(SourceSetContainer::class.java)
         sourceSets?.all {
+            if (configureSources != null) configureSources(project, it.name, it.java)
             registerSourceSetTasks(taskName, taskClass, configureTask, umbrellaTask, project, it.name, it.resources)
         }
 
@@ -48,6 +54,7 @@ class TreeWareCorePlugin : Plugin<Project> {
         val kotlinExtension = project.extensions.findByName("kotlin") as? KotlinMultiplatformExtension
         val kotlinSourceSets = kotlinExtension?.sourceSets
         kotlinSourceSets?.all {
+            if (configureSources != null) configureSources(project, it.name, it.kotlin)
             registerSourceSetTasks(taskName, taskClass, configureTask, umbrellaTask, project, it.name, it.resources)
         }
     }
@@ -68,4 +75,9 @@ class TreeWareCorePlugin : Plugin<Project> {
         }
         umbrellaTask.dependsOn(task)
     }
+}
+
+fun addGeneratedKotlinToSourceSet(project: Project, sourceSetName: String, sources: SourceDirectorySet) {
+    val outputDirectory = getMetaModelSourceOutputDirectory(project, sourceSetName)
+    sources.srcDir(outputDirectory)
 }
