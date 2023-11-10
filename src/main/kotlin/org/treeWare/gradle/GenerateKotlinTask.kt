@@ -7,9 +7,9 @@ import org.gradle.api.provider.Property
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.OutputDirectory
 import org.gradle.api.tasks.TaskAction
-import org.treeWare.metaModel.encoder.encodeDot
+import org.treeWare.metaModel.encoder.encodeKotlin
 
-abstract class GenerateDiagramsTask : DefaultTask() {
+abstract class GenerateKotlinTask : DefaultTask() {
     @get:Input
     abstract val resources: Property<SourceDirectorySet>
 
@@ -20,7 +20,7 @@ abstract class GenerateDiagramsTask : DefaultTask() {
     fun generate() {
         val metaModel = getMetaModel(resources, logger) ?: return
         val directoryPath = outputDirectory.get().toString()
-        logger.info("Generating diagrams in $directoryPath")
-        encodeDot(metaModel, directoryPath)
+        logger.info("Generating Kotlin in $directoryPath")
+        encodeKotlin(metaModel, directoryPath)
     }
 }

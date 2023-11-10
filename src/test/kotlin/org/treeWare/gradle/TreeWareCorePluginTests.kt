@@ -18,5 +18,9 @@ class TreeWareCorePluginTests {
         // Verify that the plugin registered the "generateDiagrams" umbrella task.
         assertNotNull(project.tasks.findByName("generateDiagrams"))
         // TODO(deepak-nulu): Verify that the plugin registered the "generateDiagrams<SourceSet>" tasks.
+
+        // Verify that the plugin registered the "generateKotlin" umbrella task.
+        assertNotNull(project.tasks.findByName("generateKotlin"))
+        // TODO(deepak-nulu): Verify that the plugin registered the "generateKotlin<SourceSet>" tasks.
     }
 }
