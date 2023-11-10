@@ -6,6 +6,7 @@ import org.gradle.api.Task
 import org.gradle.api.file.SourceDirectorySet
 import org.gradle.api.tasks.SourceSetContainer
 import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 private const val TREE_WARE_TASK_GROUP = "tree-ware"
 
@@ -29,6 +30,14 @@ class TreeWareCorePlugin : Plugin<Project> {
             task.resources.set(resources)
             task.outputDirectory.set(outputDirectory)
         }
+
+        // Make KotlinCompile tasks depend on the GenerateKotlin tasks.
+        // The GenerateKotlin tasks are added lazily, so they are added as dependencies when they become available.
+        project.tasks.withType(GenerateKotlinTask::class.java) { generateTask ->
+            project.tasks.withType(KotlinCompile::class.java) { compileTask ->
+                compileTask.dependsOn(generateTask)
+            }
+        }
     }
 
     private fun <T : Task> registerTasks(
@@ -46,8 +55,8 @@ class TreeWareCorePlugin : Plugin<Project> {
         val kotlinExtension = project.extensions.findByName("kotlin") as? KotlinMultiplatformExtension
         if (kotlinExtension != null) {
             // Register tasks for Kotlin multiplatform plugin sourceSets
-            val kotlinSourceSets = kotlinExtension?.sourceSets
-            kotlinSourceSets?.all {
+            val kotlinSourceSets = kotlinExtension.sourceSets
+            kotlinSourceSets.all {
                 if (configureSources != null) configureSources(project, it.name, it.kotlin)
                 registerSourceSetTasks(taskName, taskClass, configureTask, umbrellaTask, project, it.name, it.resources)
             }
