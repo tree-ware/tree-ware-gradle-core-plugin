@@ -43,19 +43,21 @@ class TreeWareCorePlugin : Plugin<Project> {
         // sourceSet-specific tasks (which are registered rather than created).
         val umbrellaTask = project.tasks.create(taskName) { it.group = TREE_WARE_TASK_GROUP }
 
-        // Register tasks for Java/Kotlin plugin sourceSets
-        val sourceSets = project.extensions.findByType(SourceSetContainer::class.java)
-        sourceSets?.all {
-            if (configureSources != null) configureSources(project, it.name, it.java)
-            registerSourceSetTasks(taskName, taskClass, configureTask, umbrellaTask, project, it.name, it.resources)
-        }
-
-        // Register tasks for Kotlin multiplatform plugin sourceSets
         val kotlinExtension = project.extensions.findByName("kotlin") as? KotlinMultiplatformExtension
-        val kotlinSourceSets = kotlinExtension?.sourceSets
-        kotlinSourceSets?.all {
-            if (configureSources != null) configureSources(project, it.name, it.kotlin)
-            registerSourceSetTasks(taskName, taskClass, configureTask, umbrellaTask, project, it.name, it.resources)
+        if (kotlinExtension != null) {
+            // Register tasks for Kotlin multiplatform plugin sourceSets
+            val kotlinSourceSets = kotlinExtension?.sourceSets
+            kotlinSourceSets?.all {
+                if (configureSources != null) configureSources(project, it.name, it.kotlin)
+                registerSourceSetTasks(taskName, taskClass, configureTask, umbrellaTask, project, it.name, it.resources)
+            }
+        } else {
+            // Register tasks for Java/Kotlin plugin sourceSets
+            val sourceSets = project.extensions.findByType(SourceSetContainer::class.java)
+            sourceSets?.all {
+                if (configureSources != null) configureSources(project, it.name, it.java)
+                registerSourceSetTasks(taskName, taskClass, configureTask, umbrellaTask, project, it.name, it.resources)
+            }
         }
     }
 
