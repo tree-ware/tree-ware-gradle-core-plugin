@@ -7,7 +7,7 @@ import org.gradle.api.provider.Property
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.OutputDirectory
 import org.gradle.api.tasks.TaskAction
-import org.treeWare.metaModel.encoder.encodeKotlin
+import org.treeWare.metaModel.encoder.kotlin.encodeKotlin
 
 abstract class GenerateKotlinTask : DefaultTask() {
     @get:Input
