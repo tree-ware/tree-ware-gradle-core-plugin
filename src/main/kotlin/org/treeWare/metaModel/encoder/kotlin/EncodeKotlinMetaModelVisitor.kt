@@ -18,6 +18,7 @@ class EncodeKotlinMetaModelVisitor(
 
     init {
         resetPackageState()
+        resetEnumerationState()
         resetEntityState()
     }
 
@@ -32,6 +33,29 @@ class EncodeKotlinMetaModelVisitor(
 
     override fun leavePackageMeta(leaderPackageMeta1: EntityModel) {
         resetPackageState()
+    }
+
+    override fun visitEnumerationMeta(leaderEnumerationMeta1: EntityModel): TraversalAction {
+        enumerationName = getMetaName(leaderEnumerationMeta1).snakeCaseToUpperCamelCase()
+        enumerationContents.appendLine("enum class $enumerationName(val number: UInt) {")
+        return TraversalAction.CONTINUE
+    }
+
+    override fun leaveEnumerationMeta(leaderEnumerationMeta1: EntityModel) {
+        enumerationContents.append("}")
+        writeFile(enumerationName, enumerationImports, enumerationContents)
+        resetEnumerationState()
+    }
+
+    override fun visitEnumerationValueMeta(leaderEnumerationValueMeta1: EntityModel): TraversalAction {
+        val name = getMetaName(leaderEnumerationValueMeta1).uppercase()
+        val number = getMetaNumber(leaderEnumerationValueMeta1)
+        enumerationContents.appendLine("    $name(${number}u),")
+        return TraversalAction.CONTINUE
+    }
+
+    override fun leaveEnumerationValueMeta(leaderEnumerationValueMeta1: EntityModel) {
+        // Nothing to do.
     }
 
     override fun visitEntityMeta(leaderEntityMeta1: EntityModel): TraversalAction {
@@ -91,6 +115,10 @@ class EncodeKotlinMetaModelVisitor(
         return TraversalAction.CONTINUE
     }
 
+    override fun leaveFieldMeta(leaderFieldMeta1: EntityModel) {
+        // Nothing to do.
+    }
+
     // endregion
 
     // region Helper methods
@@ -131,11 +159,17 @@ class EncodeKotlinMetaModelVisitor(
             FieldType.PASSWORD1WAY -> "Password1wayModel"
             FieldType.PASSWORD2WAY -> "Password2wayModel"
             FieldType.ALIAS -> "NotYetSupported"
-            FieldType.ENUMERATION -> "TODO"
+            FieldType.ENUMERATION -> getEnumerationInfoKotlinType(getEnumerationInfoMeta(fieldMeta))
             FieldType.ASSOCIATION -> getEntityInfoKotlinType(getEntityInfoMeta(fieldMeta, "association"))
             FieldType.COMPOSITION -> getEntityInfoKotlinType(getEntityInfoMeta(fieldMeta, "composition"))
             null -> throw IllegalStateException("Field type not defined")
         }
+    }
+
+    private fun getEnumerationInfoKotlinType(enumerationInfoMeta: EntityModel): String {
+        val packageName = getSingleString(enumerationInfoMeta, "package").treeWareToKotlinPackageName()
+        val enumerationName = getSingleString(enumerationInfoMeta, "name").snakeCaseToUpperCamelCase()
+        return "$packageName.$enumerationName"
     }
 
     private fun getEntityInfoKotlinType(entityInfoMeta: EntityModel): String {
@@ -148,13 +182,24 @@ class EncodeKotlinMetaModelVisitor(
 
     // region State
 
-    // Package state
+    // Package state.
     private lateinit var packageName: String
     private lateinit var packageDirectory: String
 
     private fun resetPackageState() {
         packageName = ""
         packageDirectory = ""
+    }
+
+    // Enumeration state.
+    private lateinit var enumerationName: String
+    private lateinit var enumerationImports: MutableSet<String>
+    private lateinit var enumerationContents: StringBuilder
+
+    private fun resetEnumerationState() {
+        enumerationName = ""
+        enumerationImports = mutableSetOf()
+        enumerationContents = StringBuilder()
     }
 
     // Entity state.
