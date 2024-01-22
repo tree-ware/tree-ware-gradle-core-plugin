@@ -94,12 +94,21 @@ class EncodeKotlinMetaModelVisitor(
             Multiplicity.LIST, Multiplicity.SET -> "Iterable<$valueType>"
         }
         interfaceContents.appendLine()
-        if (info != "") interfaceContents.appendLine("    /** $info */")
+        mutableClassContents.appendLine()
+        if (info != "") {
+            interfaceContents.appendLine("    /** $info */")
+            mutableClassContents.appendLine("    /** $info */")
+        }
         interfaceContents.appendLine("    val $name: $fieldType?")
+        mutableClassContents.appendLine("    override val $name: $fieldType? get() = null")
         if (multiplicity == Multiplicity.SET) {
             // Encode a function to get a particular entity from the set.
-            if (info != "") interfaceContents.appendLine("    /** $info */")
+            if (info != "") {
+                interfaceContents.appendLine("    /** $info */")
+                mutableClassContents.appendLine("    /** $info */")
+            }
             interfaceContents.append("    fun $name(")
+            mutableClassContents.append("    override fun $name(")
             // Encode keys as function parameters.
             val resolvedEntity = getMetaModelResolved(leaderFieldMeta1)?.compositionMeta ?: throw IllegalStateException(
                 "Composition cannot be resolved"
@@ -107,10 +116,15 @@ class EncodeKotlinMetaModelVisitor(
             getKeyFieldsMeta(resolvedEntity).forEachIndexed { index, keyFieldMeta ->
                 val keyFieldName = getMetaName(keyFieldMeta).snakeCaseToLowerCamelCase()
                 val keyFieldType = getFieldKotlinType(keyFieldMeta)
-                if (index != 0) interfaceContents.append(", ")
+                if (index != 0) {
+                    interfaceContents.append(", ")
+                    mutableClassContents.append(", ")
+                }
                 interfaceContents.append("$keyFieldName: $keyFieldType?")
+                mutableClassContents.append("$keyFieldName: $keyFieldType?")
             }
             interfaceContents.appendLine("): $valueType?")
+            mutableClassContents.appendLine("): $valueType? = null")
         }
         return TraversalAction.CONTINUE
     }
