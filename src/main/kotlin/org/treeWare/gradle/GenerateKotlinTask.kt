@@ -18,9 +18,10 @@ abstract class GenerateKotlinTask : DefaultTask() {
 
     @TaskAction
     fun generate() {
-        val metaModel = getMetaModel(resources, logger) ?: return
+        val metaModelFilePaths = getMetaModelFilePaths(resources)
+        val metaModel = getMetaModel(metaModelFilePaths, logger) ?: return
         val directoryPath = outputDirectory.get().toString()
         logger.info("Generating Kotlin in $directoryPath")
-        encodeKotlin(metaModel, directoryPath)
+        encodeKotlin(metaModelFilePaths, metaModel, directoryPath)
     }
 }

@@ -7,11 +7,13 @@ import org.treeWare.metaModel.encoder.util.snakeCaseToLowerCamelCase
 import org.treeWare.metaModel.encoder.util.snakeCaseToUpperCamelCase
 import org.treeWare.metaModel.traversal.AbstractLeader1MetaModelVisitor
 import org.treeWare.model.core.EntityModel
+import org.treeWare.model.core.MainModel
 import org.treeWare.model.core.getMetaModelResolved
 import org.treeWare.model.core.getSingleString
 import org.treeWare.model.traversal.TraversalAction
 
 class EncodeKotlinMetaModelVisitor(
+    private val metaModelFilePaths: List<String>,
     private val kotlinDirectoryPath: String
 ) : AbstractLeader1MetaModelVisitor<TraversalAction>(TraversalAction.CONTINUE) {
     // TODO(deepak-nulu): remove the abstract base class to ensure all elements are encoded in Kotlin.
@@ -24,10 +26,20 @@ class EncodeKotlinMetaModelVisitor(
 
     // region Leader1MetaModelVisitor methods
 
+    override fun visitMainMeta(leaderMainMeta1: MainModel): TraversalAction {
+        val treeWarePackageName = "" // TODO add support for package_name for main-model
+        initializePackageState(treeWarePackageName)
+        writeKotlinMetaModelFile(leaderMainMeta1)
+        return TraversalAction.CONTINUE
+    }
+
+    override fun leaveMainMeta(leaderMainMeta1: MainModel) {
+        resetPackageState()
+    }
+
     override fun visitPackageMeta(leaderPackageMeta1: EntityModel): TraversalAction {
-        packageName = getMetaName(leaderPackageMeta1).treeWareToKotlinPackageName()
-        packageDirectory = "$kotlinDirectoryPath/${packageName.replace(".", "/")}"
-        FileSystem.SYSTEM.createDirectories(packageDirectory.toPath())
+        val treeWarePackageName = getMetaName(leaderPackageMeta1)
+        initializePackageState(treeWarePackageName)
         return TraversalAction.CONTINUE
     }
 
@@ -137,16 +149,38 @@ class EncodeKotlinMetaModelVisitor(
 
     // region Helper methods
 
+    private fun writeKotlinMetaModelFile(mainMeta: MainModel) {
+        val mainMetaName = getMainMetaName(mainMeta)
+        val fileName = mainMetaName.snakeCaseToUpperCamelCase() + "MetaModel"
+        val imports = setOf("org.treeWare.metaModel.newMetaModelFromJsonFiles")
+        val contents = StringBuilder()
+
+        val metaModelFilesConstant = mainMetaName.uppercase() + "_META_MODEL_FILES"
+        contents.append("val ").append(metaModelFilesConstant).appendLine(" = listOf(")
+        this.metaModelFilePaths.sorted().forEach {absolutePath ->
+            val splits = absolutePath.split("resources/")
+            val relativePath = if (splits.size > 1) splits[1] else splits[0]
+            contents.append("    \"").append(relativePath).appendLine("\",")
+        }
+        contents.appendLine(")")
+        contents.appendLine()
+        contents.append("val ").append(mainMetaName.snakeCaseToLowerCamelCase())
+            .appendLine("MetaModel = newMetaModelFromJsonFiles(")
+        contents.append("    ").append(metaModelFilesConstant).appendLine(", false, null, null, emptyList(), true")
+        contents.append(").metaModel ?: throw IllegalStateException(\"Meta-model has validation errors\")")
+
+        writeFile(fileName, imports, contents)
+    }
+
     private fun writeFile(baseFilename: String, imports: Set<String>, contents: StringBuilder) {
         val file = "$packageDirectory/$baseFilename.kt"
         FileSystem.SYSTEM.write(file.toPath()) {
             // Write the package clause.
-            this.writeUtf8("package ").writeUtf8(packageName).writeUtf8("\n")
+            if (packageName.isNotEmpty()) this.writeUtf8("package ").writeUtf8(packageName).writeUtf8("\n\n")
             // Write the imports in sorted order.
-            if (imports.isNotEmpty()) this.writeUtf8("\n")
             imports.sorted().forEach { this.writeUtf8("import ").writeUtf8(it).writeUtf8("\n") }
+            if (imports.isNotEmpty()) this.writeUtf8("\n")
             // Write the main contents.
-            if (contents.isNotEmpty()) this.writeUtf8("\n")
             this.writeUtf8(contents.toString())
         }
     }
@@ -199,6 +233,12 @@ class EncodeKotlinMetaModelVisitor(
     // Package state.
     private lateinit var packageName: String
     private lateinit var packageDirectory: String
+
+    private fun initializePackageState(treeWarePackageName: String) {
+        packageName = treeWarePackageName.treeWareToKotlinPackageName()
+        packageDirectory = "$kotlinDirectoryPath/${packageName.replace(".", "/")}"
+        FileSystem.SYSTEM.createDirectories(packageDirectory.toPath())
+    }
 
     private fun resetPackageState() {
         packageName = ""
