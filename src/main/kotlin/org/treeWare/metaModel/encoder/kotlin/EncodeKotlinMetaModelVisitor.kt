@@ -19,6 +19,7 @@ class EncodeKotlinMetaModelVisitor(
     // TODO(deepak-nulu): remove the abstract base class to ensure all elements are encoded in Kotlin.
 
     init {
+        resetMainModelState()
         resetPackageState()
         resetEnumerationState()
         resetEntityState()
@@ -28,13 +29,14 @@ class EncodeKotlinMetaModelVisitor(
 
     override fun visitMainMeta(leaderMainMeta1: MainModel): TraversalAction {
         val treeWarePackageName = "" // TODO add support for package_name for main-model
-        initializePackageState(treeWarePackageName)
-        writeKotlinMetaModelFile(leaderMainMeta1)
+        initializeMainModelPackageState(treeWarePackageName)
+        val kotlinMetaModelConstant = writeKotlinMetaModelFile(leaderMainMeta1)
+        startKotlinMainModelFiles(leaderMainMeta1, kotlinMetaModelConstant)
         return TraversalAction.CONTINUE
     }
 
     override fun leaveMainMeta(leaderMainMeta1: MainModel) {
-        resetPackageState()
+        endKotlinMainModelFiles()
     }
 
     override fun visitPackageMeta(leaderPackageMeta1: EntityModel): TraversalAction {
@@ -55,7 +57,7 @@ class EncodeKotlinMetaModelVisitor(
 
     override fun leaveEnumerationMeta(leaderEnumerationMeta1: EntityModel) {
         enumerationContents.append("}")
-        writeFile(enumerationName, enumerationImports, enumerationContents)
+        writeFile(packageDirectory, enumerationName, enumerationImports, enumerationContents)
         resetEnumerationState()
     }
 
@@ -90,9 +92,9 @@ class EncodeKotlinMetaModelVisitor(
 
     override fun leaveEntityMeta(leaderEntityMeta1: EntityModel) {
         interfaceContents.append("}")
-        writeFile(interfaceName, interfaceImports, interfaceContents)
+        writeFile(packageDirectory, interfaceName, interfaceImports, interfaceContents)
         mutableClassContents.append("}")
-        writeFile(mutableClassName, mutableClassImports, mutableClassContents)
+        writeFile(packageDirectory, mutableClassName, mutableClassImports, mutableClassContents)
         resetEntityState()
     }
 
@@ -149,7 +151,7 @@ class EncodeKotlinMetaModelVisitor(
 
     // region Helper methods
 
-    private fun writeKotlinMetaModelFile(mainMeta: MainModel) {
+    private fun writeKotlinMetaModelFile(mainMeta: MainModel): String {
         val mainMetaName = getMainMetaName(mainMeta)
         val fileName = mainMetaName.snakeCaseToUpperCamelCase() + "MetaModel"
         val imports = setOf("org.treeWare.metaModel.newMetaModelFromJsonFiles")
@@ -157,23 +159,50 @@ class EncodeKotlinMetaModelVisitor(
 
         val metaModelFilesConstant = mainMetaName.uppercase() + "_META_MODEL_FILES"
         contents.append("val ").append(metaModelFilesConstant).appendLine(" = listOf(")
-        this.metaModelFilePaths.sorted().forEach {absolutePath ->
+        this.metaModelFilePaths.sorted().forEach { absolutePath ->
             val splits = absolutePath.split("resources/")
             val relativePath = if (splits.size > 1) splits[1] else splits[0]
             contents.append("    \"").append(relativePath).appendLine("\",")
         }
         contents.appendLine(")")
         contents.appendLine()
-        contents.append("val ").append(mainMetaName.snakeCaseToLowerCamelCase())
-            .appendLine("MetaModel = newMetaModelFromJsonFiles(")
+
+        val kotlinMetaModelConstant = mainMetaName.snakeCaseToLowerCamelCase() + "MetaModel"
+        contents.append("val ").append(kotlinMetaModelConstant).appendLine(" = newMetaModelFromJsonFiles(")
         contents.append("    ").append(metaModelFilesConstant).appendLine(", false, null, null, emptyList(), true")
         contents.append(").metaModel ?: throw IllegalStateException(\"Meta-model has validation errors\")")
 
-        writeFile(fileName, imports, contents)
+        writeFile(mainModelPackageDirectory, fileName, imports, contents)
+        return kotlinMetaModelConstant
     }
 
-    private fun writeFile(baseFilename: String, imports: Set<String>, contents: StringBuilder) {
-        val file = "$packageDirectory/$baseFilename.kt"
+    private fun startKotlinMainModelFiles(mainMeta: MainModel, kotlinMetaModelConstant: String) {
+        mainModelInterfaceName = getMainMetaName(mainMeta).snakeCaseToUpperCamelCase()
+        mainModelInterfaceContents.appendLine("interface $mainModelInterfaceName : MainModel {")
+        mainModelMutableClassName = "Mutable$mainModelInterfaceName"
+        mainModelMutableClassContents.appendLine("class $mainModelMutableClassName : $mainModelInterfaceName, MutableMainModel($kotlinMetaModelConstant) {")
+    }
+
+    private fun endKotlinMainModelFiles() {
+        mainModelInterfaceContents.append("}")
+        writeFile(
+            mainModelPackageDirectory,
+            mainModelInterfaceName,
+            mainModelInterfaceImports,
+            mainModelInterfaceContents
+        )
+        mainModelMutableClassContents.append("}")
+        writeFile(
+            mainModelPackageDirectory,
+            mainModelMutableClassName,
+            mainModelMutableClassImports,
+            mainModelMutableClassContents
+        )
+        resetMainModelState()
+    }
+
+    private fun writeFile(directoryName: String, baseFilename: String, imports: Set<String>, contents: StringBuilder) {
+        val file = "$directoryName/$baseFilename.kt"
         FileSystem.SYSTEM.write(file.toPath()) {
             // Write the package clause.
             if (packageName.isNotEmpty()) this.writeUtf8("package ").writeUtf8(packageName).writeUtf8("\n\n")
@@ -229,6 +258,35 @@ class EncodeKotlinMetaModelVisitor(
     // endregion
 
     // region State
+
+    // MainModel state.
+    private lateinit var mainModelPackageName: String
+    private lateinit var mainModelPackageDirectory: String
+    private lateinit var mainModelInterfaceName: String
+    private lateinit var mainModelInterfaceImports: MutableSet<String>
+    private lateinit var mainModelInterfaceContents: StringBuilder
+    private lateinit var mainModelMutableClassName: String
+    private lateinit var mainModelMutableClassImports: MutableSet<String>
+    private lateinit var mainModelMutableClassContents: StringBuilder
+
+    private fun initializeMainModelPackageState(treeWarePackageName: String) {
+        mainModelPackageName = treeWarePackageName.treeWareToKotlinPackageName()
+        mainModelPackageDirectory = "$kotlinDirectoryPath/${mainModelPackageName.replace(".", "/")}"
+        FileSystem.SYSTEM.createDirectories(mainModelPackageDirectory.toPath())
+    }
+
+    private fun resetMainModelState() {
+        mainModelPackageName = ""
+        mainModelPackageDirectory = ""
+
+        mainModelInterfaceName = ""
+        mainModelInterfaceImports = mutableSetOf("org.treeWare.model.core.*")
+        mainModelInterfaceContents = StringBuilder()
+
+        mainModelMutableClassName = ""
+        mainModelMutableClassImports = mutableSetOf("org.treeWare.model.core.*")
+        mainModelMutableClassContents = StringBuilder()
+    }
 
     // Package state.
     private lateinit var packageName: String
