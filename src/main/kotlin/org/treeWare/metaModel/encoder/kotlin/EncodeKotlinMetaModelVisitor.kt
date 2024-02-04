@@ -6,10 +6,7 @@ import org.treeWare.metaModel.*
 import org.treeWare.metaModel.encoder.util.snakeCaseToLowerCamelCase
 import org.treeWare.metaModel.encoder.util.snakeCaseToUpperCamelCase
 import org.treeWare.metaModel.traversal.AbstractLeader1MetaModelVisitor
-import org.treeWare.model.core.EntityModel
-import org.treeWare.model.core.MainModel
-import org.treeWare.model.core.getMetaModelResolved
-import org.treeWare.model.core.getSingleString
+import org.treeWare.model.core.*
 import org.treeWare.model.traversal.TraversalAction
 
 class EncodeKotlinMetaModelVisitor(
@@ -18,18 +15,11 @@ class EncodeKotlinMetaModelVisitor(
 ) : AbstractLeader1MetaModelVisitor<TraversalAction>(TraversalAction.CONTINUE) {
     // TODO(deepak-nulu): remove the abstract base class to ensure all elements are encoded in Kotlin.
 
-    init {
-        resetMainModelState()
-        resetPackageState()
-        resetEnumerationState()
-        resetEntityState()
-    }
-
     // region Leader1MetaModelVisitor methods
 
     override fun visitMainMeta(leaderMainMeta1: MainModel): TraversalAction {
         val treeWarePackageName = "" // TODO add support for package_name for main-model
-        initializeMainModelPackageState(treeWarePackageName)
+        mainModelPackage = EncodeKotlinPackage(kotlinDirectoryPath, treeWarePackageName)
         val kotlinMetaModelConstant = writeKotlinMetaModelFile(leaderMainMeta1)
         startKotlinMainModelFiles(leaderMainMeta1, kotlinMetaModelConstant)
         return TraversalAction.CONTINUE
@@ -41,30 +31,30 @@ class EncodeKotlinMetaModelVisitor(
 
     override fun visitPackageMeta(leaderPackageMeta1: EntityModel): TraversalAction {
         val treeWarePackageName = getMetaName(leaderPackageMeta1)
-        initializePackageState(treeWarePackageName)
+        elementPackage = EncodeKotlinPackage(kotlinDirectoryPath, treeWarePackageName)
         return TraversalAction.CONTINUE
     }
 
     override fun leavePackageMeta(leaderPackageMeta1: EntityModel) {
-        resetPackageState()
+        // Nothing to do.
     }
 
     override fun visitEnumerationMeta(leaderEnumerationMeta1: EntityModel): TraversalAction {
-        enumerationName = getMetaName(leaderEnumerationMeta1).snakeCaseToUpperCamelCase()
-        enumerationContents.appendLine("enum class $enumerationName(val number: UInt) {")
+        val enumerationName = getMetaName(leaderEnumerationMeta1).snakeCaseToUpperCamelCase()
+        enumerationFile = EncodeKotlinElementFile(elementPackage, enumerationName)
+        enumerationFile.appendLine("enum class $enumerationName(val number: UInt) {")
         return TraversalAction.CONTINUE
     }
 
     override fun leaveEnumerationMeta(leaderEnumerationMeta1: EntityModel) {
-        enumerationContents.append("}")
-        writeFile(packageDirectory, enumerationName, enumerationImports, enumerationContents)
-        resetEnumerationState()
+        enumerationFile.append("}")
+        enumerationFile.write()
     }
 
     override fun visitEnumerationValueMeta(leaderEnumerationValueMeta1: EntityModel): TraversalAction {
         val name = getMetaName(leaderEnumerationValueMeta1).uppercase()
         val number = getMetaNumber(leaderEnumerationValueMeta1)
-        enumerationContents.appendLine("    $name(${number}u),")
+        enumerationFile.appendLine("    $name(${number}u),")
         return TraversalAction.CONTINUE
     }
 
@@ -73,29 +63,30 @@ class EncodeKotlinMetaModelVisitor(
     }
 
     override fun visitEntityMeta(leaderEntityMeta1: EntityModel): TraversalAction {
-        val entityName = getMetaName(leaderEntityMeta1)
-        // Start the interface contents.
-        interfaceName = entityName.snakeCaseToUpperCamelCase()
-        interfaceContents.appendLine("interface $interfaceName : EntityModel {")
-        // Start the mutable-class contents.
-        mutableClassName = "Mutable$interfaceName"
-        mutableClassContents.appendLine(
+        val entityInterfaceName = getMetaName(leaderEntityMeta1).snakeCaseToUpperCamelCase()
+        entityInterfaceFile = EncodeKotlinElementFile(elementPackage, entityInterfaceName)
+        entityInterfaceFile.import("org.treeWare.model.core.*")
+        entityInterfaceFile.appendLine("interface $entityInterfaceName : EntityModel {")
+
+        val entityMutableClassName = "Mutable$entityInterfaceName"
+        entityMutableClassFile = EncodeKotlinElementFile(elementPackage, entityMutableClassName)
+        entityMutableClassFile.import("org.treeWare.model.core.*")
+        entityMutableClassFile.appendLine(
             """
-            |class $mutableClassName(
+            |class $entityMutableClassName(
             |    meta: EntityModel,
             |    parent: MutableFieldModel
-            |) : $interfaceName, MutableEntityModel(meta, parent) {
+            |) : $entityInterfaceName, MutableEntityModel(meta, parent) {
             """.trimMargin()
         )
         return TraversalAction.CONTINUE
     }
 
     override fun leaveEntityMeta(leaderEntityMeta1: EntityModel) {
-        interfaceContents.append("}")
-        writeFile(packageDirectory, interfaceName, interfaceImports, interfaceContents)
-        mutableClassContents.append("}")
-        writeFile(packageDirectory, mutableClassName, mutableClassImports, mutableClassContents)
-        resetEntityState()
+        entityInterfaceFile.append("}")
+        entityInterfaceFile.write()
+        entityMutableClassFile.append("}")
+        entityMutableClassFile.write()
     }
 
     override fun visitFieldMeta(leaderFieldMeta1: EntityModel): TraversalAction {
@@ -107,22 +98,22 @@ class EncodeKotlinMetaModelVisitor(
             Multiplicity.REQUIRED, Multiplicity.OPTIONAL -> valueType
             Multiplicity.LIST, Multiplicity.SET -> "Iterable<$valueType>"
         }
-        interfaceContents.appendLine()
-        mutableClassContents.appendLine()
+        entityInterfaceFile.appendLine("")
+        entityMutableClassFile.appendLine("")
         if (info != "") {
-            interfaceContents.appendLine("    /** $info */")
-            mutableClassContents.appendLine("    /** $info */")
+            entityInterfaceFile.appendLine("    /** $info */")
+            entityMutableClassFile.appendLine("    /** $info */")
         }
-        interfaceContents.appendLine("    val $name: $fieldType?")
-        mutableClassContents.appendLine("    override val $name: $fieldType? get() = null")
+        entityInterfaceFile.appendLine("    val $name: $fieldType?")
+        entityMutableClassFile.appendLine("    override val $name: $fieldType? get() = null")
         if (multiplicity == Multiplicity.SET) {
             // Encode a function to get a particular entity from the set.
             if (info != "") {
-                interfaceContents.appendLine("    /** $info */")
-                mutableClassContents.appendLine("    /** $info */")
+                entityInterfaceFile.appendLine("    /** $info */")
+                entityMutableClassFile.appendLine("    /** $info */")
             }
-            interfaceContents.append("    fun $name(")
-            mutableClassContents.append("    override fun $name(")
+            entityInterfaceFile.append("    fun $name(")
+            entityMutableClassFile.append("    override fun $name(")
             // Encode keys as function parameters.
             val resolvedEntity = getMetaModelResolved(leaderFieldMeta1)?.compositionMeta ?: throw IllegalStateException(
                 "Composition cannot be resolved"
@@ -131,14 +122,14 @@ class EncodeKotlinMetaModelVisitor(
                 val keyFieldName = getMetaName(keyFieldMeta).snakeCaseToLowerCamelCase()
                 val keyFieldType = getFieldKotlinType(keyFieldMeta)
                 if (index != 0) {
-                    interfaceContents.append(", ")
-                    mutableClassContents.append(", ")
+                    entityInterfaceFile.append(", ")
+                    entityMutableClassFile.append(", ")
                 }
-                interfaceContents.append("$keyFieldName: $keyFieldType?")
-                mutableClassContents.append("$keyFieldName: $keyFieldType?")
+                entityInterfaceFile.append("$keyFieldName: $keyFieldType?")
+                entityMutableClassFile.append("$keyFieldName: $keyFieldType?")
             }
-            interfaceContents.appendLine("): $valueType?")
-            mutableClassContents.appendLine("): $valueType? = null")
+            entityInterfaceFile.appendLine("): $valueType?")
+            entityMutableClassFile.appendLine("): $valueType? = null")
         }
         return TraversalAction.CONTINUE
     }
@@ -172,40 +163,41 @@ class EncodeKotlinMetaModelVisitor(
         contents.append("    ").append(metaModelFilesConstant).appendLine(", false, null, null, emptyList(), true")
         contents.append(").metaModel ?: throw IllegalStateException(\"Meta-model has validation errors\")")
 
-        writeFile(mainModelPackageDirectory, fileName, imports, contents)
+        writeFile(mainModelPackage, fileName, imports, contents)
         return kotlinMetaModelConstant
     }
 
     private fun startKotlinMainModelFiles(mainMeta: MainModel, kotlinMetaModelConstant: String) {
-        mainModelInterfaceName = getMainMetaName(mainMeta).snakeCaseToUpperCamelCase()
-        mainModelInterfaceContents.appendLine("interface $mainModelInterfaceName : MainModel {")
-        mainModelMutableClassName = "Mutable$mainModelInterfaceName"
-        mainModelMutableClassContents.appendLine("class $mainModelMutableClassName : $mainModelInterfaceName, MutableMainModel($kotlinMetaModelConstant) {")
+        val mainModelInterfaceName = getMainMetaName(mainMeta).snakeCaseToUpperCamelCase()
+        mainModelInterfaceFile = EncodeKotlinElementFile(mainModelPackage, mainModelInterfaceName)
+        mainModelInterfaceFile.import("org.treeWare.model.core.*")
+        mainModelInterfaceFile.appendLine("interface $mainModelInterfaceName : MainModel {")
+
+        val mainModelMutableClassName = "Mutable$mainModelInterfaceName"
+        mainModelMutableClassFile = EncodeKotlinElementFile(mainModelPackage, mainModelMutableClassName)
+        mainModelMutableClassFile.import("org.treeWare.model.core.*")
+        mainModelMutableClassFile.appendLine("class $mainModelMutableClassName : $mainModelInterfaceName, MutableMainModel($kotlinMetaModelConstant) {")
     }
 
     private fun endKotlinMainModelFiles() {
-        mainModelInterfaceContents.append("}")
-        writeFile(
-            mainModelPackageDirectory,
-            mainModelInterfaceName,
-            mainModelInterfaceImports,
-            mainModelInterfaceContents
-        )
-        mainModelMutableClassContents.append("}")
-        writeFile(
-            mainModelPackageDirectory,
-            mainModelMutableClassName,
-            mainModelMutableClassImports,
-            mainModelMutableClassContents
-        )
-        resetMainModelState()
+        mainModelInterfaceFile.append("}")
+        mainModelInterfaceFile.write()
+
+        mainModelMutableClassFile.append("}")
+        mainModelMutableClassFile.write()
     }
 
-    private fun writeFile(directoryName: String, baseFilename: String, imports: Set<String>, contents: StringBuilder) {
-        val file = "$directoryName/$baseFilename.kt"
+    private fun writeFile(
+        elementPackage: EncodeKotlinPackage,
+        baseFilename: String,
+        imports: Set<String>,
+        contents: StringBuilder
+    ) {
+        val file = "${elementPackage.directory}/$baseFilename.kt"
         FileSystem.SYSTEM.write(file.toPath()) {
             // Write the package clause.
-            if (packageName.isNotEmpty()) this.writeUtf8("package ").writeUtf8(packageName).writeUtf8("\n\n")
+            if (elementPackage.name.isNotEmpty()) this.writeUtf8("package ").writeUtf8(elementPackage.name)
+                .writeUtf8("\n\n")
             // Write the imports in sorted order.
             imports.sorted().forEach { this.writeUtf8("import ").writeUtf8(it).writeUtf8("\n") }
             if (imports.isNotEmpty()) this.writeUtf8("\n")
@@ -260,80 +252,19 @@ class EncodeKotlinMetaModelVisitor(
     // region State
 
     // MainModel state.
-    private lateinit var mainModelPackageName: String
-    private lateinit var mainModelPackageDirectory: String
-    private lateinit var mainModelInterfaceName: String
-    private lateinit var mainModelInterfaceImports: MutableSet<String>
-    private lateinit var mainModelInterfaceContents: StringBuilder
-    private lateinit var mainModelMutableClassName: String
-    private lateinit var mainModelMutableClassImports: MutableSet<String>
-    private lateinit var mainModelMutableClassContents: StringBuilder
-
-    private fun initializeMainModelPackageState(treeWarePackageName: String) {
-        mainModelPackageName = treeWarePackageName.treeWareToKotlinPackageName()
-        mainModelPackageDirectory = "$kotlinDirectoryPath/${mainModelPackageName.replace(".", "/")}"
-        FileSystem.SYSTEM.createDirectories(mainModelPackageDirectory.toPath())
-    }
-
-    private fun resetMainModelState() {
-        mainModelPackageName = ""
-        mainModelPackageDirectory = ""
-
-        mainModelInterfaceName = ""
-        mainModelInterfaceImports = mutableSetOf("org.treeWare.model.core.*")
-        mainModelInterfaceContents = StringBuilder()
-
-        mainModelMutableClassName = ""
-        mainModelMutableClassImports = mutableSetOf("org.treeWare.model.core.*")
-        mainModelMutableClassContents = StringBuilder()
-    }
+    private lateinit var mainModelPackage: EncodeKotlinPackage
+    private lateinit var mainModelInterfaceFile: EncodeKotlinElementFile
+    private lateinit var mainModelMutableClassFile: EncodeKotlinElementFile
 
     // Package state.
-    private lateinit var packageName: String
-    private lateinit var packageDirectory: String
-
-    private fun initializePackageState(treeWarePackageName: String) {
-        packageName = treeWarePackageName.treeWareToKotlinPackageName()
-        packageDirectory = "$kotlinDirectoryPath/${packageName.replace(".", "/")}"
-        FileSystem.SYSTEM.createDirectories(packageDirectory.toPath())
-    }
-
-    private fun resetPackageState() {
-        packageName = ""
-        packageDirectory = ""
-    }
+    private lateinit var elementPackage: EncodeKotlinPackage
 
     // Enumeration state.
-    private lateinit var enumerationName: String
-    private lateinit var enumerationImports: MutableSet<String>
-    private lateinit var enumerationContents: StringBuilder
-
-    private fun resetEnumerationState() {
-        enumerationName = ""
-        enumerationImports = mutableSetOf()
-        enumerationContents = StringBuilder()
-    }
+    private lateinit var enumerationFile: EncodeKotlinElementFile
 
     // Entity state.
-    private lateinit var interfaceName: String
-    private lateinit var interfaceImports: MutableSet<String>
-    private lateinit var interfaceContents: StringBuilder
-    private lateinit var mutableClassName: String
-    private lateinit var mutableClassImports: MutableSet<String>
-    private lateinit var mutableClassContents: StringBuilder
-
-    private fun resetEntityState() {
-        interfaceName = ""
-        interfaceImports = mutableSetOf("org.treeWare.model.core.*")
-        interfaceContents = StringBuilder()
-
-        mutableClassName = ""
-        mutableClassImports = mutableSetOf("org.treeWare.model.core.*")
-        mutableClassContents = StringBuilder()
-    }
+    private lateinit var entityInterfaceFile: EncodeKotlinElementFile
+    private lateinit var entityMutableClassFile: EncodeKotlinElementFile
 
     // endregion
 }
-
-private fun String.treeWareToKotlinPackageName(): String =
-    this.split(".").joinToString(".") { it.snakeCaseToLowerCamelCase() }
