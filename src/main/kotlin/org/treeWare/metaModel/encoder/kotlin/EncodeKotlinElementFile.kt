@@ -7,18 +7,23 @@ class EncodeKotlinElementFile(private val elementPackage: EncodeKotlinPackage, p
     private val imports: MutableSet<String> = mutableSetOf()
     private val contents: StringBuilder = StringBuilder()
 
+    var replica: EncodeKotlinElementFile? = null
+
     fun import(dependency: String): EncodeKotlinElementFile {
         imports.add(dependency)
+        replica?.imports?.add(dependency)
         return this
     }
 
     fun append(string: String): EncodeKotlinElementFile {
         contents.append(string)
+        replica?.append(string)
         return this
     }
 
     fun appendLine(line: String): EncodeKotlinElementFile {
         contents.appendLine(line)
+        replica?.appendLine(line)
         return this
     }
 
