@@ -29,6 +29,18 @@ class EncodeKotlinMetaModelVisitor(
         endKotlinMainModelFiles()
     }
 
+    override fun visitRootMeta(leaderRootMeta1: EntityModel): TraversalAction {
+        val types = getEntityInfoKotlinType(getEntityInfoMeta(leaderRootMeta1, "composition"))
+        mainModelInterfaceFile.append("    val modelRoot: ").append(types.interfaceType).appendLine("?")
+        mainModelMutableClassFile.append("    override val modelRoot: ").append(types.mutableClassType)
+            .appendLine("? get() = null")
+        return TraversalAction.CONTINUE
+    }
+
+    override fun leaveRootMeta(leaderRootMeta1: EntityModel) {
+        // Nothing to do.
+    }
+
     override fun visitPackageMeta(leaderPackageMeta1: EntityModel): TraversalAction {
         val treeWarePackageName = getMetaName(leaderPackageMeta1)
         elementPackage = EncodeKotlinPackage(kotlinDirectoryPath, treeWarePackageName)
@@ -229,8 +241,8 @@ class EncodeKotlinMetaModelVisitor(
             FieldType.PASSWORD2WAY -> "Password2wayModel"
             FieldType.ALIAS -> "NotYetSupported"
             FieldType.ENUMERATION -> getEnumerationInfoKotlinType(getEnumerationInfoMeta(fieldMeta))
-            FieldType.ASSOCIATION -> getEntityInfoKotlinType(getEntityInfoMeta(fieldMeta, "association"))
-            FieldType.COMPOSITION -> getEntityInfoKotlinType(getEntityInfoMeta(fieldMeta, "composition"))
+            FieldType.ASSOCIATION -> getEntityInfoKotlinType(getEntityInfoMeta(fieldMeta, "association")).interfaceType
+            FieldType.COMPOSITION -> getEntityInfoKotlinType(getEntityInfoMeta(fieldMeta, "composition")).interfaceType
             null -> throw IllegalStateException("Field type not defined")
         }
     }
@@ -241,10 +253,12 @@ class EncodeKotlinMetaModelVisitor(
         return "$packageName.$enumerationName"
     }
 
-    private fun getEntityInfoKotlinType(entityInfoMeta: EntityModel): String {
+    private data class KotlinModelTypes(val interfaceType: String, val mutableClassType: String)
+
+    private fun getEntityInfoKotlinType(entityInfoMeta: EntityModel): KotlinModelTypes {
         val packageName = getSingleString(entityInfoMeta, "package").treeWareToKotlinPackageName()
         val entityName = getSingleString(entityInfoMeta, "entity").snakeCaseToUpperCamelCase()
-        return "$packageName.$entityName"
+        return KotlinModelTypes("$packageName.$entityName", "$packageName.Mutable$entityName")
     }
 
     // endregion
