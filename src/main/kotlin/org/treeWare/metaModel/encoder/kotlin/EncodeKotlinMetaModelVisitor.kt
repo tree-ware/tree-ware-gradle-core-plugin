@@ -33,7 +33,7 @@ class EncodeKotlinMetaModelVisitor(
         val types = getEntityInfoKotlinType(getEntityInfoMeta(leaderRootMeta1, "composition"))
         mainModelInterfaceFile.append("    val modelRoot: ").append(types.interfaceType).appendLine("?")
         mainModelMutableClassFile.append("    override val modelRoot: ").append(types.mutableClassType)
-            .appendLine("? get() = null")
+            .append("? get() = root as ").append(types.mutableClassType).appendLine("?")
         return TraversalAction.CONTINUE
     }
 
@@ -89,6 +89,14 @@ class EncodeKotlinMetaModelVisitor(
             |    meta: EntityModel,
             |    parent: MutableFieldModel
             |) : $entityInterfaceName, MutableEntityModel(meta, parent) {
+            |    companion object {
+            |        val fieldValueFactory: FieldValueFactory =
+            |            { fieldMeta, parent ->
+            |                val entityMeta = getMetaModelResolved(fieldMeta)?.compositionMeta
+            |                    ?: throw IllegalStateException("Field composition is not resolved")
+            |                $entityMutableClassName(entityMeta, parent)
+            |            }
+            |    }
             """.trimMargin()
         )
         return TraversalAction.CONTINUE
@@ -185,10 +193,17 @@ class EncodeKotlinMetaModelVisitor(
         mainModelInterfaceFile.import("org.treeWare.model.core.*")
         mainModelInterfaceFile.appendLine("interface $mainModelInterfaceName : MainModel {")
 
+        val rootMeta = getRootMeta(mainMeta)
+        val rootTypes = getEntityInfoKotlinType(getEntityInfoMeta(rootMeta, "composition"))
+
         val mainModelMutableClassName = "Mutable$mainModelInterfaceName"
         mainModelMutableClassFile = EncodeKotlinElementFile(mainModelPackage, mainModelMutableClassName)
         mainModelMutableClassFile.import("org.treeWare.model.core.*")
-        mainModelMutableClassFile.appendLine("class $mainModelMutableClassName : $mainModelInterfaceName, MutableMainModel($kotlinMetaModelConstant) {")
+        mainModelMutableClassFile.appendLine("""
+            |class $mainModelMutableClassName : $mainModelInterfaceName, MutableMainModel(
+            |    $kotlinMetaModelConstant, ${rootTypes.mutableClassType}.fieldValueFactory
+            |) {
+        """.trimMargin())
     }
 
     private fun endKotlinMainModelFiles() {
