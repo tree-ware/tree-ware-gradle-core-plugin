@@ -1,12 +1,13 @@
 package org.treeWare.metaModel.encoder.kotlin
 
-import okio.FileSystem
-import okio.Path.Companion.toPath
 import org.treeWare.metaModel.*
 import org.treeWare.metaModel.encoder.util.snakeCaseToLowerCamelCase
 import org.treeWare.metaModel.encoder.util.snakeCaseToUpperCamelCase
 import org.treeWare.metaModel.traversal.AbstractLeader1MetaModelVisitor
-import org.treeWare.model.core.*
+import org.treeWare.model.core.EntityModel
+import org.treeWare.model.core.MainModel
+import org.treeWare.model.core.getMetaModelResolved
+import org.treeWare.model.core.getSingleString
 import org.treeWare.model.traversal.TraversalAction
 
 class EncodeKotlinMetaModelVisitor(
@@ -127,9 +128,10 @@ class EncodeKotlinMetaModelVisitor(
     }
 
     override fun visitFieldMeta(leaderFieldMeta1: EntityModel): TraversalAction {
-        val name = getMetaName(leaderFieldMeta1).snakeCaseToLowerCamelCase()
+        val fieldNameTreeWare = getMetaName(leaderFieldMeta1)
+        val fieldNameKotlin = fieldNameTreeWare.snakeCaseToLowerCamelCase()
         val info = getMetaInfo(leaderFieldMeta1)?.trim() ?: ""
-        val fieldType = getFieldTypeMeta(leaderFieldMeta1)
+        val fieldType = getFieldTypeMeta(leaderFieldMeta1) ?: throw IllegalStateException("Field type not defined")
         val valueTypes = getFieldKotlinType(leaderFieldMeta1)
         val multiplicity = getMultiplicityMeta(leaderFieldMeta1)
         val fieldClasses = getMultiplicityKotlinType(multiplicity, valueTypes)
@@ -139,10 +141,10 @@ class EncodeKotlinMetaModelVisitor(
             entityInterfaceFile.appendLine("    /** $info */")
             entityMutableClassFile.appendLine("    /** $info */")
         }
-        entityInterfaceFile.appendLine("    val $name: ${fieldClasses.interfaceType}?")
-        entityMutableClassFile.appendLine("    override val $name: ${fieldClasses.mutableClassType}? get() = null")
+        entityInterfaceFile.appendLine("    val $fieldNameKotlin: ${fieldClasses.interfaceType}?")
+        encodeFieldGetter(fieldNameTreeWare, fieldNameKotlin, fieldType, fieldClasses, multiplicity)
         if (fieldType == FieldType.COMPOSITION) entityGetCompositionFactoryMethod.appendLine(
-            """            "$name" -> ${valueTypes.mutableClassType}.fieldValueFactory"""
+            """            "$fieldNameKotlin" -> ${valueTypes.mutableClassType}.fieldValueFactory"""
         )
         if (multiplicity == Multiplicity.SET) {
             // Encode a function to get a particular entity from the set.
@@ -150,8 +152,8 @@ class EncodeKotlinMetaModelVisitor(
                 entityInterfaceFile.appendLine("    /** $info */")
                 entityMutableClassFile.appendLine("    /** $info */")
             }
-            entityInterfaceFile.append("    fun $name(")
-            entityMutableClassFile.append("    override fun $name(")
+            entityInterfaceFile.append("    fun $fieldNameKotlin(")
+            entityMutableClassFile.append("    override fun $fieldNameKotlin(")
             // Encode keys as function parameters.
             val resolvedEntity = getMetaModelResolved(leaderFieldMeta1)?.compositionMeta ?: throw IllegalStateException(
                 "Composition cannot be resolved"
@@ -183,25 +185,25 @@ class EncodeKotlinMetaModelVisitor(
     private fun writeKotlinMetaModelFile(mainMeta: MainModel): String {
         val mainMetaName = getMainMetaName(mainMeta)
         val fileName = mainMetaName.snakeCaseToUpperCamelCase() + "MetaModel"
-        val imports = setOf("org.treeWare.metaModel.newMetaModelFromJsonFiles")
-        val contents = StringBuilder()
+        val file = EncodeKotlinElementFile(mainModelPackage, fileName)
+        file.import("org.treeWare.metaModel.newMetaModelFromJsonFiles")
 
         val metaModelFilesConstant = mainMetaName.uppercase() + "_META_MODEL_FILES"
-        contents.append("val ").append(metaModelFilesConstant).appendLine(" = listOf(")
+        file.append("val ").append(metaModelFilesConstant).appendLine(" = listOf(")
         this.metaModelFilePaths.sorted().forEach { absolutePath ->
             val splits = absolutePath.split("resources/")
             val relativePath = if (splits.size > 1) splits[1] else splits[0]
-            contents.append("    \"").append(relativePath).appendLine("\",")
+            file.append("    \"").append(relativePath).appendLine("\",")
         }
-        contents.appendLine(")")
-        contents.appendLine()
+        file.appendLine(")")
+        file.appendLine("")
 
         val kotlinMetaModelConstant = mainMetaName.snakeCaseToLowerCamelCase() + "MetaModel"
-        contents.append("val ").append(kotlinMetaModelConstant).appendLine(" = newMetaModelFromJsonFiles(")
-        contents.append("    ").append(metaModelFilesConstant).appendLine(", false, null, null, emptyList(), true")
-        contents.append(").metaModel ?: throw IllegalStateException(\"Meta-model has validation errors\")")
+        file.append("val ").append(kotlinMetaModelConstant).appendLine(" = newMetaModelFromJsonFiles(")
+        file.append("    ").append(metaModelFilesConstant).appendLine(", false, null, null, emptyList(), true")
+        file.append(").metaModel ?: throw IllegalStateException(\"Meta-model has validation errors\")")
 
-        writeFile(mainModelPackage, fileName, imports, contents)
+        file.write()
         return kotlinMetaModelConstant
     }
 
@@ -232,25 +234,6 @@ class EncodeKotlinMetaModelVisitor(
 
         mainModelMutableClassFile.append("}")
         mainModelMutableClassFile.write()
-    }
-
-    private fun writeFile(
-        elementPackage: EncodeKotlinPackage,
-        baseFilename: String,
-        imports: Set<String>,
-        contents: StringBuilder
-    ) {
-        val file = "${elementPackage.directory}/$baseFilename.kt"
-        FileSystem.SYSTEM.write(file.toPath()) {
-            // Write the package clause.
-            if (elementPackage.name.isNotEmpty()) this.writeUtf8("package ").writeUtf8(elementPackage.name)
-                .writeUtf8("\n\n")
-            // Write the imports in sorted order.
-            imports.sorted().forEach { this.writeUtf8("import ").writeUtf8(it).writeUtf8("\n") }
-            if (imports.isNotEmpty()) this.writeUtf8("\n")
-            // Write the main contents.
-            this.writeUtf8(contents.toString())
-        }
     }
 
     private fun getFieldKotlinType(fieldMeta: EntityModel): KotlinModelTypes {
@@ -304,6 +287,71 @@ class EncodeKotlinMetaModelVisitor(
         val packageName = getSingleString(entityInfoMeta, "package").treeWareToKotlinPackageName()
         val entityName = getSingleString(entityInfoMeta, "entity").snakeCaseToUpperCamelCase()
         return KotlinModelTypes("$packageName.$entityName", "$packageName.Mutable$entityName")
+    }
+
+    private fun encodeFieldGetter(
+        fieldNameTreeWare: String,
+        fieldNameKotlin: String,
+        fieldType: FieldType,
+        fieldClasses: KotlinModelTypes,
+        multiplicity: Multiplicity
+    ) {
+        entityMutableClassFile.appendLine("    override val $fieldNameKotlin: ${fieldClasses.mutableClassType}? get() {")
+        when (multiplicity) {
+            Multiplicity.REQUIRED, Multiplicity.OPTIONAL -> encodeSingleFieldGetter(
+                fieldNameTreeWare,
+                fieldType,
+                fieldClasses
+            )
+            Multiplicity.SET -> encodeSetFieldGetter(fieldNameTreeWare, fieldNameKotlin, fieldClasses)
+            Multiplicity.LIST -> entityMutableClassFile.appendLine("""        TODO("Lists are getting dropped")""")
+            else -> entityMutableClassFile.appendLine("        return null")
+        }
+        entityMutableClassFile.appendLine("    }")
+    }
+
+    private fun encodeSingleFieldGetter(
+        fieldNameTreeWare: String,
+        fieldType: FieldType,
+        fieldClasses: KotlinModelTypes
+    ) {
+        entityMutableClassFile.appendLine("""        val singleField = this.getField("$fieldNameTreeWare") as? SingleFieldModel? ?: return null""")
+        when (fieldType) {
+            FieldType.BOOLEAN,
+            FieldType.UINT8,
+            FieldType.UINT16,
+            FieldType.UINT32,
+            FieldType.UINT64,
+            FieldType.INT8,
+            FieldType.INT16,
+            FieldType.INT32,
+            FieldType.INT64,
+            FieldType.FLOAT,
+            FieldType.DOUBLE,
+            FieldType.BIG_INTEGER,
+            FieldType.BIG_DECIMAL,
+            FieldType.TIMESTAMP,
+            FieldType.STRING,
+            FieldType.UUID,
+            FieldType.BLOB -> {
+                entityMutableClassFile.appendLine("""        val primitive = singleField.value as? PrimitiveModel ?: return null""")
+                entityMutableClassFile.appendLine("""        return primitive.value as ${fieldClasses.mutableClassType}?""")
+            }
+            FieldType.PASSWORD1WAY -> entityMutableClassFile.appendLine("""        TODO()""")
+            FieldType.PASSWORD2WAY -> entityMutableClassFile.appendLine("""        TODO()""")
+            FieldType.ALIAS -> entityMutableClassFile.appendLine("""        TODO()""")
+            FieldType.ENUMERATION -> entityMutableClassFile.appendLine("""        TODO()""")
+            FieldType.ASSOCIATION -> entityMutableClassFile.appendLine("""        TODO()""")
+            FieldType.COMPOSITION -> entityMutableClassFile.appendLine("""        TODO()""")
+        }
+    }
+
+    private fun encodeSetFieldGetter(
+        fieldNameTreeWare: String,
+        fieldNameKotlin: String,
+        fieldClasses: KotlinModelTypes
+    ) {
+        entityMutableClassFile.appendLine("""        TODO()""")
     }
 
     // endregion
