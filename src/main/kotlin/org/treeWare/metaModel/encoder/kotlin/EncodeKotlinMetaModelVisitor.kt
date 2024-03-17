@@ -255,8 +255,8 @@ class EncodeKotlinMetaModelVisitor(
             FieldType.STRING -> KotlinModelTypes("String", "String")
             FieldType.UUID -> KotlinModelTypes("String", "String")
             FieldType.BLOB -> KotlinModelTypes("ByteArray", "ByteArray")
-            FieldType.PASSWORD1WAY -> KotlinModelTypes("Password1wayModel", "Password1wayModel")
-            FieldType.PASSWORD2WAY -> KotlinModelTypes("Password2wayModel", "Password2wayModel")
+            FieldType.PASSWORD1WAY -> KotlinModelTypes("Password1wayModel", "MutablePassword1wayModel")
+            FieldType.PASSWORD2WAY -> KotlinModelTypes("Password2wayModel", "MutablePassword2wayModel")
             FieldType.ALIAS -> KotlinModelTypes("NotYetSupported", "NotYetSupported")
             FieldType.ENUMERATION -> getEnumerationInfoKotlinType(getEnumerationInfoMeta(fieldMeta))
             FieldType.ASSOCIATION -> getEntityInfoKotlinType(getEntityInfoMeta(fieldMeta, "association"))
@@ -337,8 +337,10 @@ class EncodeKotlinMetaModelVisitor(
                 entityMutableClassFile.appendLine("""        val primitive = singleField.value as? PrimitiveModel ?: return null""")
                 entityMutableClassFile.appendLine("""        return primitive.value as ${fieldClasses.mutableClassType}?""")
             }
-            FieldType.PASSWORD1WAY -> entityMutableClassFile.appendLine("""        TODO()""")
-            FieldType.PASSWORD2WAY -> entityMutableClassFile.appendLine("""        TODO()""")
+            FieldType.PASSWORD1WAY,
+            FieldType.PASSWORD2WAY -> {
+                entityMutableClassFile.appendLine("""        return singleField.value as ${fieldClasses.mutableClassType}?""")
+            }
             FieldType.ALIAS -> entityMutableClassFile.appendLine("""        TODO()""")
             FieldType.ENUMERATION -> entityMutableClassFile.appendLine("""        TODO()""")
             FieldType.ASSOCIATION -> entityMutableClassFile.appendLine("""        TODO()""")
