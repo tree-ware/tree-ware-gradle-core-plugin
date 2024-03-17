@@ -270,7 +270,7 @@ class EncodeKotlinMetaModelVisitor(
             Multiplicity.REQUIRED, Multiplicity.OPTIONAL -> valueTypes
             Multiplicity.LIST, Multiplicity.SET -> KotlinModelTypes(
                 "Iterable<${valueTypes.interfaceType}>",
-                "Iterable<${valueTypes.mutableClassType}>"
+                "MutableIterable<${valueTypes.mutableClassType}>"
             )
         }
 
@@ -303,7 +303,7 @@ class EncodeKotlinMetaModelVisitor(
                 fieldType,
                 fieldClasses
             )
-            Multiplicity.SET -> encodeSetFieldGetter(fieldNameTreeWare, fieldNameKotlin, fieldClasses)
+            Multiplicity.SET -> encodeSetFieldGetter(fieldNameTreeWare, fieldClasses)
             Multiplicity.LIST -> entityMutableClassFile.appendLine("""        TODO("Lists are getting dropped")""")
             else -> entityMutableClassFile.appendLine("        return null")
         }
@@ -315,7 +315,7 @@ class EncodeKotlinMetaModelVisitor(
         fieldType: FieldType,
         fieldClasses: KotlinModelTypes
     ) {
-        entityMutableClassFile.appendLine("""        val singleField = this.getField("$fieldNameTreeWare") as? SingleFieldModel? ?: return null""")
+        entityMutableClassFile.appendLine("""        val singleField = this.getField("$fieldNameTreeWare") as? SingleFieldModel ?: return null""")
         when (fieldType) {
             FieldType.BOOLEAN,
             FieldType.UINT8,
@@ -342,16 +342,16 @@ class EncodeKotlinMetaModelVisitor(
             FieldType.ALIAS -> entityMutableClassFile.appendLine("""        TODO()""")
             FieldType.ENUMERATION -> entityMutableClassFile.appendLine("""        TODO()""")
             FieldType.ASSOCIATION -> entityMutableClassFile.appendLine("""        TODO()""")
-            FieldType.COMPOSITION -> entityMutableClassFile.appendLine("""        TODO()""")
+            FieldType.COMPOSITION -> {
+                entityMutableClassFile.appendLine("""        return singleField.value as? ${fieldClasses.mutableClassType}""")
+            }
         }
     }
 
-    private fun encodeSetFieldGetter(
-        fieldNameTreeWare: String,
-        fieldNameKotlin: String,
-        fieldClasses: KotlinModelTypes
-    ) {
-        entityMutableClassFile.appendLine("""        TODO()""")
+    private fun encodeSetFieldGetter(fieldNameTreeWare: String, fieldClasses: KotlinModelTypes) {
+        entityMutableClassFile.appendLine("""        val setField = this.getField("$fieldNameTreeWare") as? MutableSetFieldModel ?: return null""")
+        entityMutableClassFile.appendLine("""        @Suppress("UNCHECKED_CAST")""")
+        entityMutableClassFile.appendLine("""        return setField.values as? ${fieldClasses.mutableClassType}""")
     }
 
     // endregion
