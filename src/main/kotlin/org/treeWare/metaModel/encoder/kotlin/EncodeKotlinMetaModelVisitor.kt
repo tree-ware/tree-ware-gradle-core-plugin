@@ -55,7 +55,7 @@ class EncodeKotlinMetaModelVisitor(
     override fun visitEnumerationMeta(leaderEnumerationMeta1: EntityModel): TraversalAction {
         val enumerationName = getMetaName(leaderEnumerationMeta1).snakeCaseToUpperCamelCase()
         enumerationFile = EncodeKotlinElementFile(elementPackage, enumerationName)
-        enumerationFile.appendLine("enum class $enumerationName(val number: UInt) {")
+        enumerationFile.appendLine("enum class $enumerationName {")
         return TraversalAction.CONTINUE
     }
 
@@ -66,8 +66,7 @@ class EncodeKotlinMetaModelVisitor(
 
     override fun visitEnumerationValueMeta(leaderEnumerationValueMeta1: EntityModel): TraversalAction {
         val name = getMetaName(leaderEnumerationValueMeta1).uppercase()
-        val number = getMetaNumber(leaderEnumerationValueMeta1)
-        enumerationFile.appendLine("    $name(${number}u),")
+        enumerationFile.appendLine("    $name,")
         return TraversalAction.CONTINUE
     }
 
@@ -224,7 +223,7 @@ class EncodeKotlinMetaModelVisitor(
             |class $mainModelMutableClassName : $mainModelInterfaceName, MutableMainModel(
             |    $kotlinMetaModelConstant, ${rootTypes.mutableClassType}.fieldValueFactory
             |) {
-        """.trimMargin()
+            """.trimMargin()
         )
     }
 
@@ -342,7 +341,18 @@ class EncodeKotlinMetaModelVisitor(
                 entityMutableClassFile.appendLine("""        return singleField.value as ${fieldClasses.mutableClassType}?""")
             }
             FieldType.ALIAS -> entityMutableClassFile.appendLine("""        TODO()""")
-            FieldType.ENUMERATION -> entityMutableClassFile.appendLine("""        TODO()""")
+            FieldType.ENUMERATION -> {
+                entityMutableClassFile.appendLine(
+                    """
+                    |        val enumeration = singleField.value as? EnumerationModel ?: return null
+                    |        return try {
+                    |            ${fieldClasses.mutableClassType}.valueOf(enumeration.value.uppercase())
+                    |        } catch (e: IllegalArgumentException) {
+                    |            null
+                    |        }
+                    """.trimMargin()
+                )
+            }
             FieldType.ASSOCIATION -> entityMutableClassFile.appendLine("""        TODO()""")
             FieldType.COMPOSITION -> {
                 entityMutableClassFile.appendLine("""        return singleField.value as? ${fieldClasses.mutableClassType}""")
