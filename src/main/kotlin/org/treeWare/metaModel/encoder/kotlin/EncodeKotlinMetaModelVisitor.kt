@@ -199,7 +199,7 @@ class EncodeKotlinMetaModelVisitor(
 
         val kotlinMetaModelConstant = mainMetaName.snakeCaseToLowerCamelCase() + "MetaModel"
         file.append("val ").append(kotlinMetaModelConstant).appendLine(" = newMetaModelFromJsonFiles(")
-        file.append("    ").append(metaModelFilesConstant).appendLine(", false, null, null, emptyList(), true")
+        file.append("    ").append(metaModelFilesConstant).appendLine(", false, null, null, ::rootEntityFactory, emptyList(), true")
         file.append(").metaModel ?: throw IllegalStateException(\"Meta-model has validation errors\")")
 
         file.write()
@@ -218,6 +218,15 @@ class EncodeKotlinMetaModelVisitor(
         val mainModelMutableClassName = "Mutable$mainModelInterfaceName"
         mainModelMutableClassFile = EncodeKotlinElementFile(mainModelPackage, mainModelMutableClassName)
         mainModelMutableClassFile.import("org.treeWare.model.core.*")
+        // rootEntityFactory() function.
+        mainModelMutableClassFile.appendLine(
+            """
+            |fun rootEntityFactory(rootMeta: EntityModel, parent: MutableFieldModel) =
+            |    ${rootTypes.mutableClassType}(rootMeta, parent)
+            |
+            """.trimMargin()
+        )
+        // MutableMainModel subclass.
         mainModelMutableClassFile.appendLine(
             """
             |class $mainModelMutableClassName : $mainModelInterfaceName, MutableMainModel(

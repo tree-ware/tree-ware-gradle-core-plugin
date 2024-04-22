@@ -6,6 +6,7 @@ import org.gradle.api.logging.Logger
 import org.gradle.api.provider.Property
 import org.treeWare.metaModel.newMetaModelFromJsonFiles
 import org.treeWare.model.core.MainModel
+import org.treeWare.model.core.defaultRootEntityFactory
 
 fun getMetaModelFilePaths(resources: Property<SourceDirectorySet>): List<String> =
     resources.get().filter {
@@ -20,6 +21,7 @@ fun getMetaModel(metaModelFilePaths: List<String>, logger: Logger): MainModel? {
         false,
         null,
         null,
+        ::defaultRootEntityFactory,
         emptyList(),
         true,
         FileSystem.SYSTEM

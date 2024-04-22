@@ -1,7 +1,7 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 group = "org.tree-ware.tree-ware-gradle-core-plugin"
-version = "0.1.0.0"
+version = "0.1.0.0-SNAPSHOT"
 
 plugins {
     kotlin("jvm") version "1.7.0"
@@ -12,6 +12,7 @@ plugins {
 }
 
 repositories {
+    mavenLocal() // TODO #### delete
     mavenCentral()
     maven { url = uri("https://jitpack.io") }
 }
