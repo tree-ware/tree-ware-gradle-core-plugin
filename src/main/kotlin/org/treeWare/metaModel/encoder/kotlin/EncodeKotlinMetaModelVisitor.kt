@@ -16,6 +16,8 @@ class EncodeKotlinMetaModelVisitor(
 ) : AbstractLeader1MetaModelVisitor<TraversalAction>(TraversalAction.CONTINUE) {
     // TODO(deepak-nulu): remove the abstract base class to ensure all elements are encoded in Kotlin.
 
+    private lateinit var rootKotlinType: KotlinModelTypes
+
     // region Leader1MetaModelVisitor methods
 
     override fun visitMainMeta(leaderMainMeta1: MainModel): TraversalAction {
@@ -102,7 +104,7 @@ class EncodeKotlinMetaModelVisitor(
         entityGetCompositionFactoryMethod = StringBuilder()
         entityGetCompositionFactoryMethod.appendLine(
             """
-            |    protected override fun getCompositionFactory(fieldName: String, fieldMeta: EntityModel): FieldValueFactory =
+            |    override fun getCompositionFactory(fieldName: String, fieldMeta: EntityModel): FieldValueFactory =
             |        when (fieldName) {
             """.trimMargin()
         )
@@ -199,7 +201,8 @@ class EncodeKotlinMetaModelVisitor(
 
         val kotlinMetaModelConstant = mainMetaName.snakeCaseToLowerCamelCase() + "MetaModel"
         file.append("val ").append(kotlinMetaModelConstant).appendLine(" = newMetaModelFromJsonFiles(")
-        file.append("    ").append(metaModelFilesConstant).appendLine(", false, null, null, ::rootEntityFactory, emptyList(), true")
+        file.append("    ").append(metaModelFilesConstant)
+        file.appendLine(", false, null, null, ::rootEntityFactory, emptyList(), true")
         file.append(").metaModel ?: throw IllegalStateException(\"Meta-model has validation errors\")")
 
         file.write()
@@ -213,7 +216,7 @@ class EncodeKotlinMetaModelVisitor(
         mainModelInterfaceFile.appendLine("interface $mainModelInterfaceName : MainModel {")
 
         val rootMeta = getRootMeta(mainMeta)
-        val rootTypes = getEntityInfoKotlinType(getEntityInfoMeta(rootMeta, "composition"))
+        rootKotlinType = getEntityInfoKotlinType(getEntityInfoMeta(rootMeta, "composition"))
 
         val mainModelMutableClassName = "Mutable$mainModelInterfaceName"
         mainModelMutableClassFile = EncodeKotlinElementFile(mainModelPackage, mainModelMutableClassName)
@@ -222,7 +225,7 @@ class EncodeKotlinMetaModelVisitor(
         mainModelMutableClassFile.appendLine(
             """
             |fun rootEntityFactory(rootMeta: EntityModel, parent: MutableFieldModel) =
-            |    ${rootTypes.mutableClassType}(rootMeta, parent)
+            |    ${rootKotlinType.mutableClassType}(rootMeta, parent)
             |
             """.trimMargin()
         )
@@ -230,7 +233,7 @@ class EncodeKotlinMetaModelVisitor(
         mainModelMutableClassFile.appendLine(
             """
             |class $mainModelMutableClassName : $mainModelInterfaceName, MutableMainModel(
-            |    $kotlinMetaModelConstant, ${rootTypes.mutableClassType}.fieldValueFactory
+            |    $kotlinMetaModelConstant, ${rootKotlinType.mutableClassType}.fieldValueFactory
             |) {
             """.trimMargin()
         )
@@ -267,7 +270,7 @@ class EncodeKotlinMetaModelVisitor(
             FieldType.PASSWORD2WAY -> KotlinModelTypes("Password2wayModel", "MutablePassword2wayModel")
             FieldType.ALIAS -> KotlinModelTypes("NotYetSupported", "NotYetSupported")
             FieldType.ENUMERATION -> getEnumerationInfoKotlinType(getEnumerationInfoMeta(fieldMeta))
-            FieldType.ASSOCIATION -> getEntityInfoKotlinType(getEntityInfoMeta(fieldMeta, "association"))
+            FieldType.ASSOCIATION -> rootKotlinType
             FieldType.COMPOSITION -> getEntityInfoKotlinType(getEntityInfoMeta(fieldMeta, "composition"))
             null -> throw IllegalStateException("Field type not defined")
         }
@@ -362,7 +365,13 @@ class EncodeKotlinMetaModelVisitor(
                     """.trimMargin()
                 )
             }
-            FieldType.ASSOCIATION -> entityMutableClassFile.appendLine("""        TODO()""")
+            FieldType.ASSOCIATION -> {
+                entityMutableClassFile.appendLine(
+                    """
+                    |        val association = singleField.value as? MutableAssociationModel ?: return null
+                    |        return association.value as ${rootKotlinType.mutableClassType}?
+                    """.trimMargin())
+            }
             FieldType.COMPOSITION -> {
                 entityMutableClassFile.appendLine("""        return singleField.value as? ${fieldClasses.mutableClassType}""")
             }
