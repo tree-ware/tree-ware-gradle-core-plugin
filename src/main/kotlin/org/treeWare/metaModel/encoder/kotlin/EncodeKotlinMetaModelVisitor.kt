@@ -145,7 +145,7 @@ class EncodeKotlinMetaModelVisitor(
         entityInterfaceFile.appendLine("    val $fieldNameKotlin: ${fieldClasses.interfaceType}?")
         encodeFieldGetter(fieldNameTreeWare, fieldNameKotlin, fieldType, fieldClasses, multiplicity)
         if (fieldType == FieldType.COMPOSITION) entityGetCompositionFactoryMethod.appendLine(
-            """            "$fieldNameKotlin" -> ${valueTypes.mutableClassType}.fieldValueFactory"""
+            """            "$fieldNameTreeWare" -> ${valueTypes.mutableClassType}.fieldValueFactory"""
         )
         if (multiplicity == Multiplicity.SET) {
             // Encode a function to get a particular entity from the set.
