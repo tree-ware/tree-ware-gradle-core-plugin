@@ -148,29 +148,7 @@ class EncodeKotlinMetaModelVisitor(
             """            "$fieldNameTreeWare" -> ${valueTypes.mutableClassType}.fieldValueFactory"""
         )
         if (multiplicity == Multiplicity.SET) {
-            // Encode a function to get a particular entity from the set.
-            if (info != "") {
-                entityInterfaceFile.appendLine("    /** $info */")
-                entityMutableClassFile.appendLine("    /** $info */")
-            }
-            entityInterfaceFile.append("    fun $fieldNameKotlin(")
-            entityMutableClassFile.append("    override fun $fieldNameKotlin(")
-            // Encode keys as function parameters.
-            val resolvedEntity = getMetaModelResolved(leaderFieldMeta1)?.compositionMeta ?: throw IllegalStateException(
-                "Composition cannot be resolved"
-            )
-            getKeyFieldsMeta(resolvedEntity).forEachIndexed { index, keyFieldMeta ->
-                val keyFieldName = getMetaName(keyFieldMeta).snakeCaseToLowerCamelCase()
-                val keyFieldType = getFieldKotlinType(keyFieldMeta)
-                if (index != 0) {
-                    entityInterfaceFile.append(", ")
-                    entityMutableClassFile.append(", ")
-                }
-                entityInterfaceFile.append("$keyFieldName: ${keyFieldType.interfaceType}?")
-                entityMutableClassFile.append("$keyFieldName: ${keyFieldType.interfaceType}?")
-            }
-            entityInterfaceFile.appendLine("): ${valueTypes.interfaceType}?")
-            entityMutableClassFile.appendLine("): ${valueTypes.mutableClassType}? = null")
+            encodeSetFieldEntityGetter(leaderFieldMeta1, info, fieldNameTreeWare, fieldNameKotlin, valueTypes)
         }
         return TraversalAction.CONTINUE
     }
@@ -370,7 +348,8 @@ class EncodeKotlinMetaModelVisitor(
                     """
                     |        val association = singleField.value as? MutableAssociationModel ?: return null
                     |        return association.value as ${rootKotlinType.mutableClassType}?
-                    """.trimMargin())
+                    """.trimMargin()
+                )
             }
             FieldType.COMPOSITION -> {
                 entityMutableClassFile.appendLine("""        return singleField.value as? ${fieldClasses.mutableClassType}""")
@@ -382,6 +361,58 @@ class EncodeKotlinMetaModelVisitor(
         entityMutableClassFile.appendLine("""        val setField = this.getField("$fieldNameTreeWare") as? MutableSetFieldModel ?: return null""")
         entityMutableClassFile.appendLine("""        @Suppress("UNCHECKED_CAST")""")
         entityMutableClassFile.appendLine("""        return setField.values as? ${fieldClasses.mutableClassType}""")
+    }
+
+    /** Encode a function to get a particular entity from the set using key values.
+     */
+    private fun encodeSetFieldEntityGetter(
+        leaderFieldMeta1: EntityModel,
+        info: String,
+        fieldNameTreeWare: String,
+        fieldNameKotlin: String,
+        valueType: KotlinModelTypes
+    ) {
+        if (info != "") {
+            entityInterfaceFile.appendLine("    /** $info */")
+            entityMutableClassFile.appendLine("    /** $info */")
+        }
+        // Encode keys as function parameters.
+        val resolvedEntity = getMetaModelResolved(leaderFieldMeta1)?.compositionMeta ?: throw IllegalStateException(
+            "Composition cannot be resolved"
+        )
+        val keyFieldsMeta = getKeyFieldsMeta(resolvedEntity)
+        val keyParameterNamesAndTypes = getKeyParameterNames(keyFieldsMeta, null, true).joinToString(", ")
+        val keyParameterNamesForModelId = getKeyParameterNames(keyFieldsMeta, null, false).joinToString(", ")
+        entityInterfaceFile.append("    fun $fieldNameKotlin($keyParameterNamesAndTypes): ${valueType.interfaceType}?")
+        entityMutableClassFile.appendLine(
+            """
+            |    override fun $fieldNameKotlin($keyParameterNamesAndTypes): ${valueType.mutableClassType}? {
+            |        val keyValues = listOf<Any?>($keyParameterNamesForModelId)
+            |        val elementModelId = EntityKeysModelId(keyValues)
+            |        val setField = this.getField("$fieldNameTreeWare") as? MutableSetFieldModel ?: return null
+            |        return setField.getValueMatching(elementModelId) as? ${valueType.mutableClassType}
+            |    }
+            """.trimMargin()
+        )
+    }
+
+    private fun getKeyParameterNames(
+        keyFieldsMeta: List<EntityModel>,
+        prefix: String?,
+        withTypes: Boolean
+    ): List<String> = keyFieldsMeta.flatMap { keyFieldMeta ->
+        val keyFieldName = getMetaName(keyFieldMeta).snakeCaseToLowerCamelCase()
+        val keyFieldFlattenedName =
+            if (prefix == null) keyFieldName else "$prefix${keyFieldName.replaceFirstChar(Char::uppercase)}"
+        if (isCompositionFieldMeta(keyFieldMeta)) {
+            val childResolvedEntity = getMetaModelResolved(keyFieldMeta)?.compositionMeta
+                ?: throw IllegalStateException("Composite key field composition has not been resolved")
+            val childKeyFieldsMeta = getKeyFieldsMeta(childResolvedEntity)
+            getKeyParameterNames(childKeyFieldsMeta, keyFieldName, withTypes)
+        } else if (withTypes) {
+            val keyFieldType = getFieldKotlinType(keyFieldMeta)
+            listOf("$keyFieldFlattenedName: ${keyFieldType.interfaceType}?")
+        } else listOf(keyFieldFlattenedName)
     }
 
     // endregion
