@@ -16,7 +16,7 @@ class EncodeKotlinMetaModelVisitor(
 ) : AbstractLeader1MetaModelVisitor<TraversalAction>(TraversalAction.CONTINUE) {
     // TODO(deepak-nulu): remove the abstract base class to ensure all elements are encoded in Kotlin.
 
-    private lateinit var rootKotlinType: KotlinModelTypes
+    private lateinit var rootKotlinType: KotlinType
 
     // region Leader1MetaModelVisitor methods
 
@@ -33,10 +33,10 @@ class EncodeKotlinMetaModelVisitor(
     }
 
     override fun visitRootMeta(leaderRootMeta1: EntityModel): TraversalAction {
-        val types = getEntityInfoKotlinType(getEntityInfoMeta(leaderRootMeta1, "composition"))
-        mainModelInterfaceFile.append("    val modelRoot: ").append(types.interfaceType).appendLine("?")
-        mainModelMutableClassFile.append("    override val modelRoot: ").append(types.mutableClassType)
-            .append("? get() = root as ").append(types.mutableClassType).appendLine("?")
+        val rootKotlinType = getEntityInfoKotlinType(getEntityInfoMeta(leaderRootMeta1, "composition"))
+        mainModelInterfaceFile.append("    val modelRoot: ").append(rootKotlinType.interfaceType).appendLine("?")
+        mainModelMutableClassFile.append("    override val modelRoot: ").append(rootKotlinType.mutableClassType)
+            .append("? get() = root as ").append(rootKotlinType.mutableClassType).appendLine("?")
         return TraversalAction.CONTINUE
     }
 
@@ -225,28 +225,28 @@ class EncodeKotlinMetaModelVisitor(
         mainModelMutableClassFile.write()
     }
 
-    private fun getFieldKotlinType(fieldMeta: EntityModel): KotlinModelTypes {
+    private fun getFieldKotlinType(fieldMeta: EntityModel): KotlinType {
         return when (getFieldTypeMeta(fieldMeta)) {
-            FieldType.BOOLEAN -> KotlinModelTypes("Boolean", "Boolean")
-            FieldType.UINT8 -> KotlinModelTypes("UByte", "UByte")
-            FieldType.UINT16 -> KotlinModelTypes("UShort", "UShort")
-            FieldType.UINT32 -> KotlinModelTypes("UInt", "UInt")
-            FieldType.UINT64 -> KotlinModelTypes("ULong", "ULong")
-            FieldType.INT8 -> KotlinModelTypes("Byte", "Byte")
-            FieldType.INT16 -> KotlinModelTypes("Short", "Short")
-            FieldType.INT32 -> KotlinModelTypes("Int", "Int")
-            FieldType.INT64 -> KotlinModelTypes("Long", "Long")
-            FieldType.FLOAT -> KotlinModelTypes("Float", "Float")
-            FieldType.DOUBLE -> KotlinModelTypes("Double", "Double")
-            FieldType.BIG_INTEGER -> KotlinModelTypes("java.math.BigInteger", "java.math.BigInteger")
-            FieldType.BIG_DECIMAL -> KotlinModelTypes("java.math.BigDecimal", "java.math.BigDecimal")
-            FieldType.TIMESTAMP -> KotlinModelTypes("ULong", "ULong")
-            FieldType.STRING -> KotlinModelTypes("String", "String")
-            FieldType.UUID -> KotlinModelTypes("String", "String")
-            FieldType.BLOB -> KotlinModelTypes("ByteArray", "ByteArray")
-            FieldType.PASSWORD1WAY -> KotlinModelTypes("Password1wayModel", "MutablePassword1wayModel")
-            FieldType.PASSWORD2WAY -> KotlinModelTypes("Password2wayModel", "MutablePassword2wayModel")
-            FieldType.ALIAS -> KotlinModelTypes("NotYetSupported", "NotYetSupported")
+            FieldType.BOOLEAN -> KotlinType("Boolean", "Boolean")
+            FieldType.UINT8 -> KotlinType("UByte", "UByte")
+            FieldType.UINT16 -> KotlinType("UShort", "UShort")
+            FieldType.UINT32 -> KotlinType("UInt", "UInt")
+            FieldType.UINT64 -> KotlinType("ULong", "ULong")
+            FieldType.INT8 -> KotlinType("Byte", "Byte")
+            FieldType.INT16 -> KotlinType("Short", "Short")
+            FieldType.INT32 -> KotlinType("Int", "Int")
+            FieldType.INT64 -> KotlinType("Long", "Long")
+            FieldType.FLOAT -> KotlinType("Float", "Float")
+            FieldType.DOUBLE -> KotlinType("Double", "Double")
+            FieldType.BIG_INTEGER -> KotlinType("java.math.BigInteger", "java.math.BigInteger")
+            FieldType.BIG_DECIMAL -> KotlinType("java.math.BigDecimal", "java.math.BigDecimal")
+            FieldType.TIMESTAMP -> KotlinType("ULong", "ULong")
+            FieldType.STRING -> KotlinType("String", "String")
+            FieldType.UUID -> KotlinType("String", "String")
+            FieldType.BLOB -> KotlinType("ByteArray", "ByteArray")
+            FieldType.PASSWORD1WAY -> KotlinType("Password1wayModel", "MutablePassword1wayModel")
+            FieldType.PASSWORD2WAY -> KotlinType("Password2wayModel", "MutablePassword2wayModel")
+            FieldType.ALIAS -> KotlinType("NotYetSupported", "NotYetSupported")
             FieldType.ENUMERATION -> getEnumerationInfoKotlinType(getEnumerationInfoMeta(fieldMeta))
             FieldType.ASSOCIATION -> rootKotlinType
             FieldType.COMPOSITION -> getEntityInfoKotlinType(getEntityInfoMeta(fieldMeta, "composition"))
@@ -254,45 +254,45 @@ class EncodeKotlinMetaModelVisitor(
         }
     }
 
-    private fun getMultiplicityKotlinType(multiplicity: Multiplicity, valueTypes: KotlinModelTypes): KotlinModelTypes =
+    private fun getMultiplicityKotlinType(multiplicity: Multiplicity, valueTypes: KotlinType): KotlinType =
         when (multiplicity) {
             Multiplicity.REQUIRED, Multiplicity.OPTIONAL -> valueTypes
-            Multiplicity.LIST, Multiplicity.SET -> KotlinModelTypes(
+            Multiplicity.LIST, Multiplicity.SET -> KotlinType(
                 "Iterable<${valueTypes.interfaceType}>",
                 "MutableIterable<${valueTypes.mutableClassType}>"
             )
         }
 
-    private fun getEnumerationInfoKotlinType(enumerationInfoMeta: EntityModel): KotlinModelTypes {
+    private fun getEnumerationInfoKotlinType(enumerationInfoMeta: EntityModel): KotlinType {
         val packageName = getSingleString(enumerationInfoMeta, "package").treeWareToKotlinPackageName()
         val enumerationName = getSingleString(enumerationInfoMeta, "name").snakeCaseToUpperCamelCase()
         val enumerationKotlinType = "$packageName.$enumerationName"
-        return KotlinModelTypes(enumerationKotlinType, enumerationKotlinType)
+        return KotlinType(enumerationKotlinType, enumerationKotlinType)
     }
 
-    private data class KotlinModelTypes(val interfaceType: String, val mutableClassType: String)
+    private data class KotlinType(val interfaceType: String, val mutableClassType: String)
 
-    private fun getEntityInfoKotlinType(entityInfoMeta: EntityModel): KotlinModelTypes {
+    private fun getEntityInfoKotlinType(entityInfoMeta: EntityModel): KotlinType {
         val packageName = getSingleString(entityInfoMeta, "package").treeWareToKotlinPackageName()
         val entityName = getSingleString(entityInfoMeta, "entity").snakeCaseToUpperCamelCase()
-        return KotlinModelTypes("$packageName.$entityName", "$packageName.Mutable$entityName")
+        return KotlinType("$packageName.$entityName", "$packageName.Mutable$entityName")
     }
 
     private fun encodeFieldGetter(
         fieldNameTreeWare: String,
         fieldNameKotlin: String,
         fieldType: FieldType,
-        fieldClasses: KotlinModelTypes,
+        fieldKotlinType: KotlinType,
         multiplicity: Multiplicity
     ) {
-        entityMutableClassFile.appendLine("    override val $fieldNameKotlin: ${fieldClasses.mutableClassType}? get() {")
+        entityMutableClassFile.appendLine("    override val $fieldNameKotlin: ${fieldKotlinType.mutableClassType}? get() {")
         when (multiplicity) {
             Multiplicity.REQUIRED, Multiplicity.OPTIONAL -> encodeSingleFieldGetter(
                 fieldNameTreeWare,
                 fieldType,
-                fieldClasses
+                fieldKotlinType
             )
-            Multiplicity.SET -> encodeSetFieldGetter(fieldNameTreeWare, fieldClasses)
+            Multiplicity.SET -> encodeSetFieldGetter(fieldNameTreeWare, fieldKotlinType)
             Multiplicity.LIST -> entityMutableClassFile.appendLine("""        TODO("Lists are getting dropped")""")
             else -> entityMutableClassFile.appendLine("        return null")
         }
@@ -302,7 +302,7 @@ class EncodeKotlinMetaModelVisitor(
     private fun encodeSingleFieldGetter(
         fieldNameTreeWare: String,
         fieldType: FieldType,
-        fieldClasses: KotlinModelTypes
+        fieldKotlinType: KotlinType
     ) {
         entityMutableClassFile.appendLine("""        val singleField = this.getField("$fieldNameTreeWare") as? SingleFieldModel ?: return null""")
         when (fieldType) {
@@ -324,11 +324,11 @@ class EncodeKotlinMetaModelVisitor(
             FieldType.UUID,
             FieldType.BLOB -> {
                 entityMutableClassFile.appendLine("""        val primitive = singleField.value as? PrimitiveModel ?: return null""")
-                entityMutableClassFile.appendLine("""        return primitive.value as ${fieldClasses.mutableClassType}?""")
+                entityMutableClassFile.appendLine("""        return primitive.value as ${fieldKotlinType.mutableClassType}?""")
             }
             FieldType.PASSWORD1WAY,
             FieldType.PASSWORD2WAY -> {
-                entityMutableClassFile.appendLine("""        return singleField.value as ${fieldClasses.mutableClassType}?""")
+                entityMutableClassFile.appendLine("""        return singleField.value as ${fieldKotlinType.mutableClassType}?""")
             }
             FieldType.ALIAS -> entityMutableClassFile.appendLine("""        TODO()""")
             FieldType.ENUMERATION -> {
@@ -336,7 +336,7 @@ class EncodeKotlinMetaModelVisitor(
                     """
                     |        val enumeration = singleField.value as? EnumerationModel ?: return null
                     |        return try {
-                    |            ${fieldClasses.mutableClassType}.valueOf(enumeration.value.uppercase())
+                    |            ${fieldKotlinType.mutableClassType}.valueOf(enumeration.value.uppercase())
                     |        } catch (e: IllegalArgumentException) {
                     |            null
                     |        }
@@ -352,15 +352,15 @@ class EncodeKotlinMetaModelVisitor(
                 )
             }
             FieldType.COMPOSITION -> {
-                entityMutableClassFile.appendLine("""        return singleField.value as? ${fieldClasses.mutableClassType}""")
+                entityMutableClassFile.appendLine("""        return singleField.value as? ${fieldKotlinType.mutableClassType}""")
             }
         }
     }
 
-    private fun encodeSetFieldGetter(fieldNameTreeWare: String, fieldClasses: KotlinModelTypes) {
+    private fun encodeSetFieldGetter(fieldNameTreeWare: String, fieldKotlinType: KotlinType) {
         entityMutableClassFile.appendLine("""        val setField = this.getField("$fieldNameTreeWare") as? MutableSetFieldModel ?: return null""")
         entityMutableClassFile.appendLine("""        @Suppress("UNCHECKED_CAST")""")
-        entityMutableClassFile.appendLine("""        return setField.values as? ${fieldClasses.mutableClassType}""")
+        entityMutableClassFile.appendLine("""        return setField.values as? ${fieldKotlinType.mutableClassType}""")
     }
 
     /** Encode a function to get a particular entity from the set using key values.
@@ -370,7 +370,7 @@ class EncodeKotlinMetaModelVisitor(
         info: String,
         fieldNameTreeWare: String,
         fieldNameKotlin: String,
-        valueType: KotlinModelTypes
+        valueKotlinType: KotlinType
     ) {
         if (info != "") {
             entityInterfaceFile.appendLine("    /** $info */")
@@ -383,14 +383,14 @@ class EncodeKotlinMetaModelVisitor(
         val keyFieldsMeta = getKeyFieldsMeta(resolvedEntity)
         val keyParameterNamesAndTypes = getKeyParameterNames(keyFieldsMeta, null, true).joinToString(", ")
         val keyParameterNamesForModelId = getKeyParameterNames(keyFieldsMeta, null, false).joinToString(", ")
-        entityInterfaceFile.append("    fun $fieldNameKotlin($keyParameterNamesAndTypes): ${valueType.interfaceType}?")
+        entityInterfaceFile.append("    fun $fieldNameKotlin($keyParameterNamesAndTypes): ${valueKotlinType.interfaceType}?")
         entityMutableClassFile.appendLine(
             """
-            |    override fun $fieldNameKotlin($keyParameterNamesAndTypes): ${valueType.mutableClassType}? {
+            |    override fun $fieldNameKotlin($keyParameterNamesAndTypes): ${valueKotlinType.mutableClassType}? {
             |        val keyValues = listOf<Any?>($keyParameterNamesForModelId)
             |        val elementModelId = EntityKeysModelId(keyValues)
             |        val setField = this.getField("$fieldNameTreeWare") as? MutableSetFieldModel ?: return null
-            |        return setField.getValueMatching(elementModelId) as? ${valueType.mutableClassType}
+            |        return setField.getValueMatching(elementModelId) as? ${valueKotlinType.mutableClassType}
             |    }
             """.trimMargin()
         )
