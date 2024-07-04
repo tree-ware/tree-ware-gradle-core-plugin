@@ -29,14 +29,23 @@ class EncodeKotlinMetaModelVisitor(
     }
 
     override fun leaveMainMeta(leaderMainMeta1: MainModel) {
-        endKotlinMainModelFiles()
+        endKotlinMainModelFiles(leaderMainMeta1)
     }
 
     override fun visitRootMeta(leaderRootMeta1: EntityModel): TraversalAction {
-        val rootKotlinType = getEntityInfoKotlinType(getEntityInfoMeta(leaderRootMeta1, "composition"))
-        mainModelInterfaceFile.append("    val modelRoot: ").append(rootKotlinType.interfaceType).appendLine("?")
-        mainModelMutableClassFile.append("    override val modelRoot: ").append(rootKotlinType.mutableClassType)
-            .append("? get() = root as ").append(rootKotlinType.mutableClassType).appendLine("?")
+        val types = getEntityInfoKotlinType(getEntityInfoMeta(leaderRootMeta1, "composition"))
+        mainModelInterfaceFile.append("    val modelRoot: ").append(types.interfaceType).appendLine("?")
+        mainModelMutableClassFile.append(
+            """
+            |    override val modelRoot: ${types.mutableClassType}? get() = root as ${types.mutableClassType}?
+            |
+            |    fun modelRoot(configure: ${types.mutableClassType}.() -> Unit) {
+            |        val root  = getOrNewRoot() as ${types.mutableClassType}
+            |        root.configure()
+            |    }
+            |
+            """.trimMargin()
+        )
         return TraversalAction.CONTINUE
     }
 
@@ -217,11 +226,22 @@ class EncodeKotlinMetaModelVisitor(
         )
     }
 
-    private fun endKotlinMainModelFiles() {
+    private fun endKotlinMainModelFiles(mainMeta: MainModel) {
+        val mainModelInterfaceName = getMainMetaName(mainMeta).snakeCaseToUpperCamelCase()
+
         mainModelInterfaceFile.append("}")
         mainModelInterfaceFile.write()
 
-        mainModelMutableClassFile.append("}")
+        mainModelMutableClassFile.appendLine("}")
+        mainModelMutableClassFile.append(
+            """
+            |
+            |fun mutable${mainModelInterfaceName}(configure: Mutable${mainModelInterfaceName}.() -> Unit): Mutable${mainModelInterfaceName} {
+            |    val mainModel = Mutable${mainModelInterfaceName}()
+            |    mainModel.configure()
+            |    return mainModel
+            |}
+            """.trimMargin())
         mainModelMutableClassFile.write()
     }
 
