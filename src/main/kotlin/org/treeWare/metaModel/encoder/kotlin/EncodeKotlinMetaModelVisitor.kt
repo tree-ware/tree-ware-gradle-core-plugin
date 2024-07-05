@@ -306,37 +306,10 @@ class EncodeKotlinMetaModelVisitor(
         fieldKotlinType: KotlinType,
         multiplicity: Multiplicity
     ) {
-        entityMutableClassFile.appendLine("    override var $fieldNameKotlin: ${fieldKotlinType.mutableClassType}?")
-        encodeFieldGetter(fieldNameTreeWare, fieldType, fieldKotlinType, multiplicity)
-        encodeFieldSetter(fieldNameTreeWare, fieldType, fieldKotlinType, multiplicity)
-    }
-
-    private fun encodeFieldGetter(
-        fieldNameTreeWare: String,
-        fieldType: FieldType,
-        fieldKotlinType: KotlinType,
-        multiplicity: Multiplicity
-    ) {
-        entityMutableClassFile.appendLine("        get() {")
-        when (multiplicity) {
-            Multiplicity.REQUIRED, Multiplicity.OPTIONAL -> encodeSingleFieldGetter(
-                fieldNameTreeWare,
-                fieldType,
-                fieldKotlinType
-            )
-            Multiplicity.SET -> encodeSetFieldGetter(fieldNameTreeWare, fieldKotlinType)
-            Multiplicity.LIST -> entityMutableClassFile.appendLine("""            TODO("Lists are getting dropped")""")
-            else -> entityMutableClassFile.appendLine("            return null")
+        if (multiplicity == Multiplicity.LIST) {
+            encodeListField(fieldNameKotlin, fieldKotlinType)
+            return // Support for lists is getting dropped soon.
         }
-        entityMutableClassFile.appendLine("        }")
-    }
-
-    private fun encodeSingleFieldGetter(
-        fieldNameTreeWare: String,
-        fieldType: FieldType,
-        fieldKotlinType: KotlinType
-    ) {
-        entityMutableClassFile.appendLine("""            val singleField = this.getField("$fieldNameTreeWare") as? SingleFieldModel ?: return null""")
         when (fieldType) {
             FieldType.BOOLEAN,
             FieldType.UINT8,
@@ -354,131 +327,136 @@ class EncodeKotlinMetaModelVisitor(
             FieldType.TIMESTAMP,
             FieldType.STRING,
             FieldType.UUID,
-            FieldType.BLOB -> {
-                entityMutableClassFile.appendLine("""            val primitive = singleField.value as? PrimitiveModel ?: return null""")
-                entityMutableClassFile.appendLine("""            return primitive.value as ${fieldKotlinType.mutableClassType}""")
-            }
+            FieldType.BLOB -> encodePrimitiveField(fieldNameTreeWare, fieldNameKotlin, fieldKotlinType)
             FieldType.PASSWORD1WAY,
-            FieldType.PASSWORD2WAY -> {
-                entityMutableClassFile.appendLine("""            return singleField.value as ${fieldKotlinType.mutableClassType}?""")
-            }
-            FieldType.ALIAS -> entityMutableClassFile.appendLine("""            TODO()""")
-            FieldType.ENUMERATION -> {
-                entityMutableClassFile.appendLine(
-                    """
-                    |            val enumeration = singleField.value as? EnumerationModel ?: return null
-                    |            return try {
-                    |                ${fieldKotlinType.mutableClassType}.valueOf(enumeration.value.uppercase())
-                    |            } catch (e: IllegalArgumentException) {
-                    |                null
-                    |            }
-                    """.trimMargin()
+            FieldType.PASSWORD2WAY -> encodePasswordField(fieldNameTreeWare, fieldNameKotlin, fieldKotlinType)
+            FieldType.ALIAS -> {} // Aliases are not yet supported.
+            FieldType.ENUMERATION -> encodeEnumerationField(fieldNameTreeWare, fieldNameKotlin, fieldKotlinType)
+            FieldType.ASSOCIATION -> encodeAssociationField(fieldNameTreeWare, fieldNameKotlin, fieldKotlinType)
+            FieldType.COMPOSITION ->
+                if (multiplicity != Multiplicity.SET) encodeCompositionSingleField(
+                    fieldNameTreeWare,
+                    fieldNameKotlin,
+                    fieldKotlinType
                 )
-            }
-            FieldType.ASSOCIATION -> {
-                entityMutableClassFile.appendLine(
-                    """
-                    |            val association = singleField.value as? MutableAssociationModel ?: return null
-                    |            return association.value as ${rootKotlinType.mutableClassType}?
-                    """.trimMargin()
-                )
-            }
-            FieldType.COMPOSITION -> {
-                entityMutableClassFile.appendLine("""            return singleField.value as? ${fieldKotlinType.mutableClassType}""")
-            }
+                else encodeCompositionSetField(fieldNameTreeWare, fieldNameKotlin, fieldKotlinType)
         }
     }
 
-    private fun encodeSetFieldGetter(fieldNameTreeWare: String, fieldKotlinType: KotlinType) {
-        entityMutableClassFile.appendLine("""        val setField = this.getField("$fieldNameTreeWare") as? MutableSetFieldModel ?: return null""")
-        entityMutableClassFile.appendLine("""        @Suppress("UNCHECKED_CAST")""")
-        entityMutableClassFile.appendLine("""        return setField.values as? ${fieldKotlinType.mutableClassType}""")
-    }
-
-    private fun encodeFieldSetter(
-        fieldNameTreeWare: String,
-        fieldType: FieldType,
-        fieldKotlinType: KotlinType,
-        multiplicity: Multiplicity
-    ) {
+    private fun encodeListField(fieldNameKotlin: String, fieldKotlinType: KotlinType) {
         entityMutableClassFile.appendLine(
             """
+            |    override val $fieldNameKotlin: ${fieldKotlinType.mutableClassType}?
+            |        get() {
+            |            TODO("Lists are getting dropped")
+            |        }
+            """.trimMargin()
+        )
+    }
+
+    private fun encodePrimitiveField(fieldNameTreeWare: String, fieldNameKotlin: String, fieldKotlinType: KotlinType) {
+        entityMutableClassFile.appendLine(
+            """
+            |    override var $fieldNameKotlin: ${fieldKotlinType.mutableClassType}?
+            |        get() {
+            |            val singleField = this.getField("$fieldNameTreeWare") as? SingleFieldModel ?: return null
+            |            val primitive = singleField.value as? PrimitiveModel ?: return null
+            |            return primitive.value as ${fieldKotlinType.mutableClassType}
+            |        }
             |        set(newValue) {
             |            if (newValue == null) {
             |                this.getField("$fieldNameTreeWare")?.detachFromParent()
             |                return
             |            }
+            |            val singleField = this.getOrNewField("$fieldNameTreeWare") as MutableSingleFieldModel
+            |            val primitive = singleField.getNewValue() as MutablePrimitiveModel
+            |            primitive.setValue(newValue.toString())
+            |        }
             """.trimMargin()
         )
-        when (multiplicity) {
-            Multiplicity.REQUIRED, Multiplicity.OPTIONAL -> encodeSingleFieldSetter(
-                fieldNameTreeWare,
-                fieldType,
-                fieldKotlinType
-            )
-            Multiplicity.SET -> encodeSetFieldSetter(fieldNameTreeWare, fieldKotlinType)
-            Multiplicity.LIST -> entityMutableClassFile.appendLine("""            TODO("Lists are getting dropped")""")
-            else -> entityMutableClassFile.appendLine("            return null")
-        }
-        entityMutableClassFile.appendLine("        }")
     }
 
-    private fun encodeSingleFieldSetter(
+    private fun encodePasswordField(fieldNameTreeWare: String, fieldNameKotlin: String, fieldKotlinType: KotlinType) {
+        entityMutableClassFile.appendLine(
+            """
+            |    override val $fieldNameKotlin: ${fieldKotlinType.mutableClassType}?
+            |        get() {
+            |            val singleField = this.getField("$fieldNameTreeWare") as? SingleFieldModel ?: return null
+            |            return singleField.value as ${fieldKotlinType.mutableClassType}?
+            |        }
+            """.trimMargin()
+        )
+    }
+
+    private fun encodeEnumerationField(
         fieldNameTreeWare: String,
-        fieldType: FieldType,
+        fieldNameKotlin: String,
         fieldKotlinType: KotlinType
     ) {
-        entityMutableClassFile.appendLine("""            val singleField = this.getOrNewField("$fieldNameTreeWare") as MutableSingleFieldModel""")
-        when (fieldType) {
-            FieldType.BOOLEAN,
-            FieldType.UINT8,
-            FieldType.UINT16,
-            FieldType.UINT32,
-            FieldType.UINT64,
-            FieldType.INT8,
-            FieldType.INT16,
-            FieldType.INT32,
-            FieldType.INT64,
-            FieldType.FLOAT,
-            FieldType.DOUBLE,
-            FieldType.BIG_INTEGER,
-            FieldType.BIG_DECIMAL,
-            FieldType.TIMESTAMP,
-            FieldType.STRING,
-            FieldType.UUID,
-            FieldType.BLOB -> {
-                entityMutableClassFile.appendLine("""            val primitive = singleField.getNewValue() as MutablePrimitiveModel""")
-                entityMutableClassFile.appendLine("""            primitive.setValue(newValue.toString())""")
-            }
-            FieldType.PASSWORD1WAY,
-            FieldType.PASSWORD2WAY -> {
-                entityMutableClassFile.appendLine("""            TODO()""")
-            }
-            FieldType.ALIAS -> entityMutableClassFile.appendLine("""            TODO()""")
-            FieldType.ENUMERATION -> {
-                entityMutableClassFile.appendLine(
-                    """
-                    |            val enumeration = singleField.getNewValue() as MutableEnumerationModel
-                    |            TODO()
-                    """.trimMargin()
-                )
-            }
-            FieldType.ASSOCIATION -> {
-                entityMutableClassFile.appendLine(
-                    """
-                    |            val association = singleField.getNewValue() as MutableAssociationModel
-                    |            TODO()
-                    """.trimMargin()
-                )
-            }
-            FieldType.COMPOSITION -> {
-                entityMutableClassFile.appendLine("""            TODO()""")
-            }
-        }
+        entityMutableClassFile.appendLine(
+            """
+            |    override val $fieldNameKotlin: ${fieldKotlinType.mutableClassType}?
+            |        get() {
+            |            val singleField = this.getField("$fieldNameTreeWare") as? SingleFieldModel ?: return null
+            |            val enumeration = singleField.value as? EnumerationModel ?: return null
+            |            return try {
+            |                ${fieldKotlinType.mutableClassType}.valueOf(enumeration.value.uppercase())
+            |            } catch (e: IllegalArgumentException) {
+            |                null
+            |            }
+            |        }
+            """.trimMargin()
+        )
     }
 
-    private fun encodeSetFieldSetter(fieldNameTreeWare: String, fieldKotlinType: KotlinType) {
-        entityMutableClassFile.appendLine("""        TODO()""")
+    private fun encodeAssociationField(
+        fieldNameTreeWare: String,
+        fieldNameKotlin: String,
+        fieldKotlinType: KotlinType
+    ) {
+        entityMutableClassFile.appendLine(
+            """
+            |    override val $fieldNameKotlin: ${fieldKotlinType.mutableClassType}?
+            |        get() {
+            |            val singleField = this.getField("$fieldNameTreeWare") as? SingleFieldModel ?: return null
+            |            val association = singleField.value as? MutableAssociationModel ?: return null
+            |            return association.value as ${rootKotlinType.mutableClassType}?
+            |        }
+            """.trimMargin()
+        )
+    }
+
+    private fun encodeCompositionSingleField(
+        fieldNameTreeWare: String,
+        fieldNameKotlin: String,
+        fieldKotlinType: KotlinType
+    ) {
+        entityMutableClassFile.appendLine(
+            """
+            |    override val $fieldNameKotlin: ${fieldKotlinType.mutableClassType}?
+            |        get() {
+            |            val singleField = this.getField("$fieldNameTreeWare") as? SingleFieldModel ?: return null
+            |            return singleField.value as? ${fieldKotlinType.mutableClassType}
+            |        }
+            """.trimMargin()
+        )
+    }
+
+    private fun encodeCompositionSetField(
+        fieldNameTreeWare: String,
+        fieldNameKotlin: String,
+        fieldKotlinType: KotlinType
+    ) {
+        entityMutableClassFile.appendLine(
+            """
+            |    override val $fieldNameKotlin: ${fieldKotlinType.mutableClassType}?
+            |        get() {
+            |            val setField = this.getField("$fieldNameTreeWare") as? MutableSetFieldModel ?: return null
+            |            @Suppress("UNCHECKED_CAST")
+            |            return setField.values as? ${fieldKotlinType.mutableClassType}
+            |        }
+            """.trimMargin()
+        )
     }
 
     /** Encode a function to get a particular entity from the set using key values.
