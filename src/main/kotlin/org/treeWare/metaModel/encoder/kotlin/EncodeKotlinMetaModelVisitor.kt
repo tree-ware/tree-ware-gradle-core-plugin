@@ -438,6 +438,11 @@ class EncodeKotlinMetaModelVisitor(
             |            val singleField = this.getField("$fieldNameTreeWare") as? SingleFieldModel ?: return null
             |            return singleField.value as? ${fieldKotlinType.mutableClassType}
             |        }
+            |    fun $fieldNameKotlin(configure: ${fieldKotlinType.mutableClassType}.() -> Unit) {
+            |        val singleField = this.getOrNewField("$fieldNameTreeWare") as MutableSingleFieldModel
+            |        val entity = singleField.getNewValue() as ${fieldKotlinType.mutableClassType}
+            |        entity.configure()
+            |    }
             """.trimMargin()
         )
     }
