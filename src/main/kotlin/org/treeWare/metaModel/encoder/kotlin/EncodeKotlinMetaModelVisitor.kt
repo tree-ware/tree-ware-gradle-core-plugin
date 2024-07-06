@@ -395,7 +395,7 @@ class EncodeKotlinMetaModelVisitor(
     ) {
         entityMutableClassFile.appendLine(
             """
-            |    override val $fieldNameKotlin: ${fieldKotlinType.mutableClassType}?
+            |    override var $fieldNameKotlin: ${fieldKotlinType.mutableClassType}?
             |        get() {
             |            val singleField = this.getField("$fieldNameTreeWare") as? SingleFieldModel ?: return null
             |            val enumeration = singleField.value as? EnumerationModel ?: return null
@@ -404,6 +404,15 @@ class EncodeKotlinMetaModelVisitor(
             |            } catch (e: IllegalArgumentException) {
             |                null
             |            }
+            |        }
+            |        set(newValue) {
+            |            if (newValue == null) {
+            |                this.getField("$fieldNameTreeWare")?.detachFromParent()
+            |                return
+            |            }
+            |            val singleField = this.getOrNewField("$fieldNameTreeWare") as MutableSingleFieldModel
+            |            val enumeration = singleField.getNewValue() as MutableEnumerationModel
+            |            enumeration.setValue(newValue.name.lowercase())
             |        }
             """.trimMargin()
         )
