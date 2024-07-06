@@ -100,14 +100,6 @@ class EncodeKotlinMetaModelVisitor(
             |    meta: EntityModel,
             |    parent: MutableFieldModel
             |) : $entityInterfaceName, MutableEntityModel(meta, parent) {
-            |    companion object {
-            |        val fieldValueFactory: FieldValueFactory =
-            |            { fieldMeta, parent ->
-            |                val entityMeta = getMetaModelResolved(fieldMeta)?.compositionMeta
-            |                    ?: throw IllegalStateException("Field composition is not resolved")
-            |                $entityMutableClassName(entityMeta, parent)
-            |            }
-            |    }
             """.trimMargin()
         )
         entityGetCompositionFactoryMethod = StringBuilder()
@@ -121,10 +113,15 @@ class EncodeKotlinMetaModelVisitor(
     }
 
     override fun leaveEntityMeta(leaderEntityMeta1: EntityModel) {
+        val metaName = getMetaName(leaderEntityMeta1)
+        val entityInterfaceName = metaName.snakeCaseToUpperCamelCase()
+        val entityMutableClassName = "Mutable$entityInterfaceName"
+        val functionName = metaName.snakeCaseToLowerCamelCase()
+
         entityInterfaceFile.append("}")
         entityInterfaceFile.write()
 
-        entityGetCompositionFactoryMethod.appendLine(
+        entityGetCompositionFactoryMethod.append(
             """
             |            // New fields might have been added to the meta-model after this code was generated.
             |            // Handle those new fields by calling super.
@@ -132,7 +129,33 @@ class EncodeKotlinMetaModelVisitor(
             |        }
             """.trimMargin()
         )
-        entityMutableClassFile.appendLine("").append(entityGetCompositionFactoryMethod.toString())
+
+        entityMutableClassFile.appendLine("").appendLine("    // region Framework helpers")
+        entityMutableClassFile.appendLine("").appendLine(entityGetCompositionFactoryMethod.toString())
+        entityMutableClassFile.appendLine("").appendLine(
+            """
+            |    companion object {
+            |        val fieldValueFactory: FieldValueFactory =
+            |            { fieldMeta, parent ->
+            |                val entityMeta = getMetaModelResolved(fieldMeta)?.compositionMeta
+            |                    ?: throw IllegalStateException("Field composition is not resolved")
+            |                $entityMutableClassName(entityMeta, parent)
+            |            }
+            |    }
+            """.trimMargin()
+        )
+        entityMutableClassFile.appendLine("").appendLine(
+            """
+            |    class SetBuilder(val setField: MutableSetFieldModel) {
+            |        fun $functionName(configure: $entityMutableClassName.() -> Unit) {
+            |            val entity = setField.getNewValue() as $entityMutableClassName
+            |            entity.configure()
+            |            setField.addValue(entity)
+            |        }
+            |    }
+            """.trimMargin()
+        )
+        entityMutableClassFile.appendLine("").appendLine("    // endregion")
         entityMutableClassFile.append("}")
         entityMutableClassFile.write()
     }
@@ -142,23 +165,20 @@ class EncodeKotlinMetaModelVisitor(
         val fieldNameKotlin = fieldNameTreeWare.snakeCaseToLowerCamelCase()
         val info = getMetaInfo(leaderFieldMeta1)?.trim() ?: ""
         val fieldType = getFieldTypeMeta(leaderFieldMeta1) ?: throw IllegalStateException("Field type not defined")
-        val valueTypes = getFieldKotlinType(leaderFieldMeta1)
+        val valueKotlinType = getFieldKotlinType(leaderFieldMeta1)
         val multiplicity = getMultiplicityMeta(leaderFieldMeta1)
-        val fieldClasses = getMultiplicityKotlinType(multiplicity, valueTypes)
+        val fieldKotlinType = getMultiplicityKotlinType(multiplicity, valueKotlinType)
         entityInterfaceFile.appendLine("")
         entityMutableClassFile.appendLine("")
         if (info != "") {
             entityInterfaceFile.appendLine("    /** $info */")
             entityMutableClassFile.appendLine("    /** $info */")
         }
-        entityInterfaceFile.appendLine("    val $fieldNameKotlin: ${fieldClasses.interfaceType}?")
-        encodeField(fieldNameTreeWare, fieldNameKotlin, fieldType, fieldClasses, multiplicity)
+        entityInterfaceFile.appendLine("    val $fieldNameKotlin: ${fieldKotlinType.interfaceType}?")
+        encodeField(leaderFieldMeta1, info, fieldNameTreeWare, fieldNameKotlin, fieldType, fieldKotlinType, multiplicity, valueKotlinType)
         if (fieldType == FieldType.COMPOSITION) entityGetCompositionFactoryMethod.appendLine(
-            """            "$fieldNameTreeWare" -> ${valueTypes.mutableClassType}.fieldValueFactory"""
+            """            "$fieldNameTreeWare" -> ${valueKotlinType.mutableClassType}.fieldValueFactory"""
         )
-        if (multiplicity == Multiplicity.SET) {
-            encodeSetFieldEntityGetter(leaderFieldMeta1, info, fieldNameTreeWare, fieldNameKotlin, valueTypes)
-        }
         return TraversalAction.CONTINUE
     }
 
@@ -300,11 +320,14 @@ class EncodeKotlinMetaModelVisitor(
     }
 
     private fun encodeField(
+        leaderFieldMeta1: EntityModel,
+        info: String,
         fieldNameTreeWare: String,
         fieldNameKotlin: String,
         fieldType: FieldType,
         fieldKotlinType: KotlinType,
-        multiplicity: Multiplicity
+        multiplicity: Multiplicity,
+        valueKotlinType: KotlinType,
     ) {
         if (multiplicity == Multiplicity.LIST) {
             encodeListField(fieldNameKotlin, fieldKotlinType)
@@ -339,7 +362,7 @@ class EncodeKotlinMetaModelVisitor(
                     fieldNameKotlin,
                     fieldKotlinType
                 )
-                else encodeCompositionSetField(fieldNameTreeWare, fieldNameKotlin, fieldKotlinType)
+                else encodeCompositionSetField(leaderFieldMeta1, info, fieldNameTreeWare, fieldNameKotlin, fieldKotlinType, valueKotlinType)
         }
     }
 
@@ -457,9 +480,12 @@ class EncodeKotlinMetaModelVisitor(
     }
 
     private fun encodeCompositionSetField(
+        leaderFieldMeta1: EntityModel,
+        info: String,
         fieldNameTreeWare: String,
         fieldNameKotlin: String,
-        fieldKotlinType: KotlinType
+        fieldKotlinType: KotlinType,
+        valueKotlinType: KotlinType,
     ) {
         entityMutableClassFile.appendLine(
             """
@@ -469,6 +495,16 @@ class EncodeKotlinMetaModelVisitor(
             |            @Suppress("UNCHECKED_CAST")
             |            return setField.values as? ${fieldKotlinType.mutableClassType}
             |        }
+            """.trimMargin()
+        )
+        encodeSetFieldEntityGetter(leaderFieldMeta1, info, fieldNameTreeWare, fieldNameKotlin, valueKotlinType)
+        entityMutableClassFile.appendLine(
+            """
+            |    fun $fieldNameKotlin(configure: ${valueKotlinType.mutableClassType}.SetBuilder.() -> Unit) {
+            |        val setField = this.getOrNewField("$fieldNameTreeWare") as MutableSetFieldModel
+            |        val setBuilder = ${valueKotlinType.mutableClassType}.SetBuilder(setField)
+            |        setBuilder.configure()
+            |    }
             """.trimMargin()
         )
     }
