@@ -24,6 +24,8 @@ class EncodeKotlinMetaModelVisitor(
         val treeWarePackageName = "" // TODO add support for package_name for main-model
         mainModelPackage = EncodeKotlinPackage(kotlinDirectoryPath, treeWarePackageName)
         val kotlinMetaModelConstant = writeKotlinMetaModelFile(leaderMainMeta1)
+        dslMarkerName = getDslMarkerName(leaderMainMeta1)
+        writeKotlinDslMarkerFile()
         startKotlinMainModelFiles(leaderMainMeta1, kotlinMetaModelConstant)
         return TraversalAction.CONTINUE
     }
@@ -94,8 +96,10 @@ class EncodeKotlinMetaModelVisitor(
         val entityMutableClassName = "Mutable$entityInterfaceName"
         entityMutableClassFile = EncodeKotlinElementFile(elementPackage, entityMutableClassName)
         entityMutableClassFile.import("org.treeWare.model.core.*")
+        entityMutableClassFile.import(dslMarkerName)
         entityMutableClassFile.appendLine(
             """
+            |@$dslMarkerName
             |class $entityMutableClassName(
             |    meta: EntityModel,
             |    parent: MutableFieldModel
@@ -190,6 +194,11 @@ class EncodeKotlinMetaModelVisitor(
 
     // region Helper methods
 
+    private fun getDslMarkerName(mainMeta: MainModel): String {
+        val mainMetaName = getMainMetaName(mainMeta)
+        return mainMetaName.snakeCaseToUpperCamelCase() + "DslMarker"
+    }
+
     private fun writeKotlinMetaModelFile(mainMeta: MainModel): String {
         val mainMetaName = getMainMetaName(mainMeta)
         val fileName = mainMetaName.snakeCaseToUpperCamelCase() + "MetaModel"
@@ -214,6 +223,14 @@ class EncodeKotlinMetaModelVisitor(
 
         file.write()
         return kotlinMetaModelConstant
+    }
+
+    private fun writeKotlinDslMarkerFile() {
+        val file = EncodeKotlinElementFile(mainModelPackage, dslMarkerName)
+
+        file.appendLine("@DslMarker")
+        file.appendLine("annotation class $dslMarkerName")
+        file.write()
     }
 
     private fun startKotlinMainModelFiles(mainMeta: MainModel, kotlinMetaModelConstant: String) {
@@ -571,6 +588,7 @@ class EncodeKotlinMetaModelVisitor(
     // region State
 
     // MainModel state.
+    private lateinit var dslMarkerName: String
     private lateinit var mainModelPackage: EncodeKotlinPackage
     private lateinit var mainModelInterfaceFile: EncodeKotlinElementFile
     private lateinit var mainModelMutableClassFile: EncodeKotlinElementFile
