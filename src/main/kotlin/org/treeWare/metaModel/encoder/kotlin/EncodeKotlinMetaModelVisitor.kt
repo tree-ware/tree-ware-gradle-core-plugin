@@ -476,6 +476,12 @@ class EncodeKotlinMetaModelVisitor(
             |            val association = singleField.value as? MutableAssociationModel ?: return null
             |            return association.value as ${rootKotlinType.mutableClassType}?
             |        }
+            |    fun $fieldNameKotlin(configure: ${fieldKotlinType.mutableClassType}.() -> Unit) {
+            |        val singleField = this.getOrNewField("$fieldNameTreeWare") as MutableSingleFieldModel
+            |        val association = singleField.getNewValue() as MutableAssociationModel
+            |        val value = association.value as ${rootKotlinType.mutableClassType}
+            |        value.configure()
+            |    }
             """.trimMargin()
         )
     }
