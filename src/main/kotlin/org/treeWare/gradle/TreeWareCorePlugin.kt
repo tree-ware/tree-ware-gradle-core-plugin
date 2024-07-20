@@ -89,6 +89,13 @@ class TreeWareCorePlugin : Plugin<Project> {
 }
 
 fun addGeneratedKotlinToSourceSet(project: Project, sourceSetName: String, sources: SourceDirectorySet) {
-    val outputDirectory = getMetaModelSourceOutputDirectory(project, sourceSetName)
-    sources.srcDir(outputDirectory)
+    // TODO(#1) ideally the following should be set as the module directory and the `kotlin` sub-directory should become
+    //  the source directory. But that is not happening and IntelliJ keeps showing warnings that the `kotlin`
+    //  sub-directory needs to be part of the package path. So the following has been commented out for now and the
+    //  `kotlin` sub-directory is set as the source-directory. This gets rid of the warnings, but IntelliJ now shows
+    //  the `kotlin` sub-directory as a "module", not a "source directory", but the build passes.
+    // val outputDirectory = getMetaModelSourceOutputDirectory(project, sourceSetName)
+    // sources.srcDir(outputDirectory)
+    val kotlinDirectory = getMetaModelKotlinOutputDirectory(project, sourceSetName)
+    sources.srcDir(kotlinDirectory)
 }
