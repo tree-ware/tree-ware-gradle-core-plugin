@@ -152,7 +152,7 @@ class EncodeKotlinMetaModelVisitor(
             """
             |    class SetBuilder(val setField: MutableSetFieldModel) {
             |        fun $functionName(configure: $entityMutableClassName.() -> Unit) {
-            |            val entity = setField.getNewValue() as $entityMutableClassName
+            |            val entity = setField.getOrNewValue() as $entityMutableClassName
             |            entity.configure()
             |            setField.addValue(entity)
             |        }
@@ -409,7 +409,7 @@ class EncodeKotlinMetaModelVisitor(
             |                return
             |            }
             |            val singleField = this.getOrNewField("$fieldNameTreeWare") as MutableSingleFieldModel
-            |            val primitive = singleField.getNewValue() as MutablePrimitiveModel
+            |            val primitive = singleField.getOrNewValue() as MutablePrimitiveModel
             |            primitive.setValue(newValue.toString())
             |        }
             """.trimMargin()
@@ -426,7 +426,7 @@ class EncodeKotlinMetaModelVisitor(
             |        }
             |    fun $fieldNameKotlin(configure: ${fieldKotlinType.mutableClassType}.() -> Unit) {
             |        val singleField = this.getOrNewField("$fieldNameTreeWare") as MutableSingleFieldModel
-            |        val password = singleField.getNewValue() as ${fieldKotlinType.mutableClassType}
+            |        val password = singleField.getOrNewValue() as ${fieldKotlinType.mutableClassType}
             |        password.configure()
             |    }
             """.trimMargin()
@@ -456,7 +456,7 @@ class EncodeKotlinMetaModelVisitor(
             |                return
             |            }
             |            val singleField = this.getOrNewField("$fieldNameTreeWare") as MutableSingleFieldModel
-            |            val enumeration = singleField.getNewValue() as MutableEnumerationModel
+            |            val enumeration = singleField.getOrNewValue() as MutableEnumerationModel
             |            enumeration.setValue(newValue.name.lowercase())
             |        }
             """.trimMargin()
@@ -478,7 +478,7 @@ class EncodeKotlinMetaModelVisitor(
             |        }
             |    fun $fieldNameKotlin(configure: ${fieldKotlinType.mutableClassType}.() -> Unit) {
             |        val singleField = this.getOrNewField("$fieldNameTreeWare") as MutableSingleFieldModel
-            |        val association = singleField.getNewValue() as MutableAssociationModel
+            |        val association = singleField.getOrNewValue() as MutableAssociationModel
             |        val value = association.value as ${rootKotlinType.mutableClassType}
             |        value.configure()
             |    }
@@ -500,7 +500,7 @@ class EncodeKotlinMetaModelVisitor(
             |        }
             |    fun $fieldNameKotlin(configure: ${fieldKotlinType.mutableClassType}.() -> Unit) {
             |        val singleField = this.getOrNewField("$fieldNameTreeWare") as MutableSingleFieldModel
-            |        val entity = singleField.getNewValue() as ${fieldKotlinType.mutableClassType}
+            |        val entity = singleField.getOrNewValue() as ${fieldKotlinType.mutableClassType}
             |        entity.configure()
             |    }
             """.trimMargin()
