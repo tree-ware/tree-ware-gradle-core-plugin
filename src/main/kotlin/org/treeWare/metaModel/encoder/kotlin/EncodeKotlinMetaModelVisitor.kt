@@ -3,9 +3,8 @@ package org.treeWare.metaModel.encoder.kotlin
 import org.treeWare.metaModel.*
 import org.treeWare.metaModel.encoder.util.snakeCaseToLowerCamelCase
 import org.treeWare.metaModel.encoder.util.snakeCaseToUpperCamelCase
-import org.treeWare.metaModel.traversal.AbstractLeader1MetaModelVisitor
+import org.treeWare.metaModel.traversal.Leader1MetaModelVisitor
 import org.treeWare.model.core.EntityModel
-import org.treeWare.model.core.MainModel
 import org.treeWare.model.core.getMetaModelResolved
 import org.treeWare.model.core.getSingleString
 import org.treeWare.model.traversal.TraversalAction
@@ -13,47 +12,32 @@ import org.treeWare.model.traversal.TraversalAction
 class EncodeKotlinMetaModelVisitor(
     private val metaModelFilePaths: List<String>,
     private val kotlinDirectoryPath: String
-) : AbstractLeader1MetaModelVisitor<TraversalAction>(TraversalAction.CONTINUE) {
-    // TODO(deepak-nulu): remove the abstract base class to ensure all elements are encoded in Kotlin.
+) : Leader1MetaModelVisitor<TraversalAction> {
 
     private lateinit var rootKotlinType: KotlinType
 
     // region Leader1MetaModelVisitor methods
 
-    override fun visitMainMeta(leaderMainMeta1: MainModel): TraversalAction {
+    override fun visitMetaModel(leaderMeta1: EntityModel): TraversalAction {
         val treeWarePackageName = "" // TODO add support for package_name for main-model
         mainModelPackage = EncodeKotlinPackage(kotlinDirectoryPath, treeWarePackageName)
-        val kotlinMetaModelConstant = writeKotlinMetaModelFile(leaderMainMeta1)
-        dslMarkerName = getDslMarkerName(leaderMainMeta1)
+        rootKotlinType = getEntityInfoKotlinType(getEntityInfoMeta(leaderMeta1, "root"))
+        val kotlinMetaModelConstant = writeKotlinMetaModelFile(leaderMeta1)
+        dslMarkerName = getDslMarkerName(leaderMeta1)
         writeKotlinDslMarkerFile()
-        startKotlinMainModelFiles(leaderMainMeta1, kotlinMetaModelConstant)
+        writeKotlinDslModelFile(leaderMeta1, kotlinMetaModelConstant)
         return TraversalAction.CONTINUE
     }
 
-    override fun leaveMainMeta(leaderMainMeta1: MainModel) {
-        endKotlinMainModelFiles(leaderMainMeta1)
-    }
+    override fun leaveMetaModel(leaderMeta1: EntityModel) {}
 
-    override fun visitRootMeta(leaderRootMeta1: EntityModel): TraversalAction {
-        val types = getEntityInfoKotlinType(getEntityInfoMeta(leaderRootMeta1, "composition"))
-        mainModelInterfaceFile.append("    val modelRoot: ").append(types.interfaceType).appendLine("?")
-        mainModelMutableClassFile.append(
-            """
-            |    override val modelRoot: ${types.mutableClassType}? get() = root as ${types.mutableClassType}?
-            |
-            |    fun modelRoot(configure: ${types.mutableClassType}.() -> Unit) {
-            |        val root  = getOrNewRoot() as ${types.mutableClassType}
-            |        root.configure()
-            |    }
-            |
-            """.trimMargin()
-        )
-        return TraversalAction.CONTINUE
-    }
+    override fun visitVersionMeta(leaderVersionMeta1: EntityModel): TraversalAction = TraversalAction.CONTINUE
 
-    override fun leaveRootMeta(leaderRootMeta1: EntityModel) {
-        // Nothing to do.
-    }
+    override fun leaveVersionMeta(leaderVersionMeta1: EntityModel) {}
+
+    override fun visitRootMeta(leaderRootMeta1: EntityModel): TraversalAction = TraversalAction.CONTINUE
+
+    override fun leaveRootMeta(leaderRootMeta1: EntityModel) {}
 
     override fun visitPackageMeta(leaderPackageMeta1: EntityModel): TraversalAction {
         val treeWarePackageName = getMetaName(leaderPackageMeta1)
@@ -89,6 +73,8 @@ class EncodeKotlinMetaModelVisitor(
 
     override fun visitEntityMeta(leaderEntityMeta1: EntityModel): TraversalAction {
         val entityInterfaceName = getMetaName(leaderEntityMeta1).snakeCaseToUpperCamelCase()
+        val isRootEntity = rootKotlinType.interfaceType == "${elementPackage.name}.$entityInterfaceName"
+
         entityInterfaceFile = EncodeKotlinElementFile(elementPackage, entityInterfaceName)
         entityInterfaceFile.import("org.treeWare.model.core.*")
         entityInterfaceFile.appendLine("interface $entityInterfaceName : EntityModel {")
@@ -102,7 +88,7 @@ class EncodeKotlinMetaModelVisitor(
             |@$dslMarkerName
             |class $entityMutableClassName(
             |    meta: EntityModel,
-            |    parent: MutableFieldModel
+            |    parent: MutableFieldModel${if (isRootEntity) "?" else ""}
             |) : $entityInterfaceName, MutableEntityModel(meta, parent) {
             """.trimMargin()
         )
@@ -179,7 +165,16 @@ class EncodeKotlinMetaModelVisitor(
             entityMutableClassFile.appendLine("    /** $info */")
         }
         entityInterfaceFile.appendLine("    val $fieldNameKotlin: ${fieldKotlinType.interfaceType}?")
-        encodeField(leaderFieldMeta1, info, fieldNameTreeWare, fieldNameKotlin, fieldType, fieldKotlinType, multiplicity, valueKotlinType)
+        encodeField(
+            leaderFieldMeta1,
+            info,
+            fieldNameTreeWare,
+            fieldNameKotlin,
+            fieldType,
+            fieldKotlinType,
+            multiplicity,
+            valueKotlinType
+        )
         if (fieldType == FieldType.COMPOSITION) entityGetCompositionFactoryMethod.appendLine(
             """            "$fieldNameTreeWare" -> ${valueKotlinType.mutableClassType}.fieldValueFactory"""
         )
@@ -194,18 +189,19 @@ class EncodeKotlinMetaModelVisitor(
 
     // region Helper methods
 
-    private fun getDslMarkerName(mainMeta: MainModel): String {
-        val mainMetaName = getMainMetaName(mainMeta)
-        return mainMetaName.snakeCaseToUpperCamelCase() + "DslMarker"
+    private fun getDslMarkerName(meta: EntityModel): String {
+        val metaModelName = getMetaModelName(meta)
+        return metaModelName.snakeCaseToUpperCamelCase() + "DslMarker"
     }
 
-    private fun writeKotlinMetaModelFile(mainMeta: MainModel): String {
-        val mainMetaName = getMainMetaName(mainMeta)
-        val fileName = mainMetaName.snakeCaseToUpperCamelCase() + "MetaModel"
+    private fun writeKotlinMetaModelFile(meta: EntityModel): String {
+        val metaModelName = getMetaModelName(meta)
+        val fileName = metaModelName.snakeCaseToUpperCamelCase() + "MetaModel"
         val file = EncodeKotlinElementFile(mainModelPackage, fileName)
         file.import("org.treeWare.metaModel.newMetaModelFromJsonFiles")
+        file.import("org.treeWare.model.core.*")
 
-        val metaModelFilesConstant = mainMetaName.uppercase() + "_META_MODEL_FILES"
+        val metaModelFilesConstant = metaModelName.uppercase() + "_META_MODEL_FILES"
         file.append("val ").append(metaModelFilesConstant).appendLine(" = listOf(")
         this.metaModelFilePaths.sorted().forEach { absolutePath ->
             val splits = absolutePath.split("resources/")
@@ -215,11 +211,20 @@ class EncodeKotlinMetaModelVisitor(
         file.appendLine(")")
         file.appendLine("")
 
-        val kotlinMetaModelConstant = mainMetaName.snakeCaseToLowerCamelCase() + "MetaModel"
+        val kotlinMetaModelConstant = metaModelName.snakeCaseToLowerCamelCase() + "MetaModel"
         file.append("val ").append(kotlinMetaModelConstant).appendLine(" = newMetaModelFromJsonFiles(")
         file.append("    ").append(metaModelFilesConstant)
         file.appendLine(", false, null, null, ::rootEntityFactory, emptyList(), true")
-        file.append(").metaModel ?: throw IllegalStateException(\"Meta-model has validation errors\")")
+        file.appendLine(").metaModel ?: throw IllegalStateException(\"Meta-model has validation errors\")")
+
+        // rootEntityFactory() function.
+        file.appendLine(
+            """
+            |
+            |fun rootEntityFactory(rootMeta: EntityModel, parent: MutableFieldModel) =
+            |    ${rootKotlinType.mutableClassType}(rootMeta, parent)
+            """.trimMargin()
+        )
 
         file.write()
         return kotlinMetaModelConstant
@@ -227,60 +232,29 @@ class EncodeKotlinMetaModelVisitor(
 
     private fun writeKotlinDslMarkerFile() {
         val file = EncodeKotlinElementFile(mainModelPackage, dslMarkerName)
-
         file.appendLine("@DslMarker")
         file.appendLine("annotation class $dslMarkerName")
         file.write()
     }
 
-    private fun startKotlinMainModelFiles(mainMeta: MainModel, kotlinMetaModelConstant: String) {
-        val mainModelInterfaceName = getMainMetaName(mainMeta).snakeCaseToUpperCamelCase()
-        mainModelInterfaceFile = EncodeKotlinElementFile(mainModelPackage, mainModelInterfaceName)
-        mainModelInterfaceFile.import("org.treeWare.model.core.*")
-        mainModelInterfaceFile.appendLine("interface $mainModelInterfaceName : MainModel {")
-
-        val rootMeta = getRootMeta(mainMeta)
-        rootKotlinType = getEntityInfoKotlinType(getEntityInfoMeta(rootMeta, "composition"))
-
-        val mainModelMutableClassName = "Mutable$mainModelInterfaceName"
-        mainModelMutableClassFile = EncodeKotlinElementFile(mainModelPackage, mainModelMutableClassName)
-        mainModelMutableClassFile.import("org.treeWare.model.core.*")
-        // rootEntityFactory() function.
-        mainModelMutableClassFile.appendLine(
+    private fun writeKotlinDslModelFile(meta: EntityModel, kotlinMetaModelConstant: String) {
+        val metaModelName = getMetaModelName(meta)
+        val fileName = metaModelName.snakeCaseToUpperCamelCase()
+        val file = EncodeKotlinElementFile(mainModelPackage, fileName)
+        file.import("org.treeWare.metaModel.getResolvedRootMeta")
+        file.import(dslMarkerName)
+        file.appendLine(
             """
-            |fun rootEntityFactory(rootMeta: EntityModel, parent: MutableFieldModel) =
-            |    ${rootKotlinType.mutableClassType}(rootMeta, parent)
-            |
-            """.trimMargin()
-        )
-        // MutableMainModel subclass.
-        mainModelMutableClassFile.appendLine(
-            """
-            |class $mainModelMutableClassName : $mainModelInterfaceName, MutableMainModel(
-            |    $kotlinMetaModelConstant, ${rootKotlinType.mutableClassType}.fieldValueFactory
-            |) {
-            """.trimMargin()
-        )
-    }
-
-    private fun endKotlinMainModelFiles(mainMeta: MainModel) {
-        val mainModelInterfaceName = getMainMetaName(mainMeta).snakeCaseToUpperCamelCase()
-
-        mainModelInterfaceFile.append("}")
-        mainModelInterfaceFile.write()
-
-        mainModelMutableClassFile.appendLine("}")
-        mainModelMutableClassFile.append(
-            """
-            |
-            |fun mutable${mainModelInterfaceName}(configure: Mutable${mainModelInterfaceName}.() -> Unit): Mutable${mainModelInterfaceName} {
-            |    val mainModel = Mutable${mainModelInterfaceName}()
-            |    mainModel.configure()
-            |    return mainModel
+            |@$dslMarkerName
+            |fun ${metaModelName.snakeCaseToLowerCamelCase()}(configure: ${rootKotlinType.mutableClassType}.() -> Unit): ${rootKotlinType.mutableClassType} {
+            |    val rootMeta = getResolvedRootMeta($kotlinMetaModelConstant)
+            |    val root = ${rootKotlinType.mutableClassType}(rootMeta, null)
+            |    root.configure()
+            |    return root
             |}
             """.trimMargin()
         )
-        mainModelMutableClassFile.write()
+        file.write()
     }
 
     private fun getFieldKotlinType(fieldMeta: EntityModel): KotlinType {
@@ -315,7 +289,7 @@ class EncodeKotlinMetaModelVisitor(
     private fun getMultiplicityKotlinType(multiplicity: Multiplicity, valueTypes: KotlinType): KotlinType =
         when (multiplicity) {
             Multiplicity.REQUIRED, Multiplicity.OPTIONAL -> valueTypes
-            Multiplicity.LIST, Multiplicity.SET -> KotlinType(
+            Multiplicity.SET -> KotlinType(
                 "Iterable<${valueTypes.interfaceType}>",
                 "MutableIterable<${valueTypes.mutableClassType}>"
             )
@@ -346,10 +320,6 @@ class EncodeKotlinMetaModelVisitor(
         multiplicity: Multiplicity,
         valueKotlinType: KotlinType,
     ) {
-        if (multiplicity == Multiplicity.LIST) {
-            encodeListField(fieldNameKotlin, fieldKotlinType)
-            return // Support for lists is getting dropped soon.
-        }
         when (fieldType) {
             FieldType.BOOLEAN,
             FieldType.UINT8,
@@ -379,19 +349,15 @@ class EncodeKotlinMetaModelVisitor(
                     fieldNameKotlin,
                     fieldKotlinType
                 )
-                else encodeCompositionSetField(leaderFieldMeta1, info, fieldNameTreeWare, fieldNameKotlin, fieldKotlinType, valueKotlinType)
+                else encodeCompositionSetField(
+                    leaderFieldMeta1,
+                    info,
+                    fieldNameTreeWare,
+                    fieldNameKotlin,
+                    fieldKotlinType,
+                    valueKotlinType
+                )
         }
-    }
-
-    private fun encodeListField(fieldNameKotlin: String, fieldKotlinType: KotlinType) {
-        entityMutableClassFile.appendLine(
-            """
-            |    override val $fieldNameKotlin: ${fieldKotlinType.mutableClassType}?
-            |        get() {
-            |            TODO("Lists are getting dropped")
-            |        }
-            """.trimMargin()
-        )
     }
 
     private fun encodePrimitiveField(fieldNameTreeWare: String, fieldNameKotlin: String, fieldKotlinType: KotlinType) {

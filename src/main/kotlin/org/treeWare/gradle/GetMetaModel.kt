@@ -5,7 +5,7 @@ import org.gradle.api.file.SourceDirectorySet
 import org.gradle.api.logging.Logger
 import org.gradle.api.provider.Property
 import org.treeWare.metaModel.newMetaModelFromJsonFiles
-import org.treeWare.model.core.MainModel
+import org.treeWare.model.core.EntityModel
 import org.treeWare.model.core.defaultRootEntityFactory
 
 fun getMetaModelFilePaths(resources: Property<SourceDirectorySet>): List<String> =
@@ -13,7 +13,7 @@ fun getMetaModelFilePaths(resources: Property<SourceDirectorySet>): List<String>
         it.parent.endsWith(SOURCE_SET_META_MODEL_DIRECTORY_PATH) && it.extension == SOURCE_SET_META_MODEL_FILE_EXTENSION
     }.files.map { it.path }
 
-fun getMetaModel(metaModelFilePaths: List<String>, logger: Logger): MainModel? {
+fun getMetaModel(metaModelFilePaths: List<String>, logger: Logger): EntityModel? {
     if (metaModelFilePaths.isEmpty()) return null
 
     val result = newMetaModelFromJsonFiles(
