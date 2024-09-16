@@ -19,8 +19,8 @@ class EncodeKotlinMetaModelVisitor(
     // region Leader1MetaModelVisitor methods
 
     override fun visitMetaModel(leaderMeta1: EntityModel): TraversalAction {
-        val treeWarePackageName = "" // TODO add support for package_name for main-model
-        mainModelPackage = EncodeKotlinPackage(kotlinDirectoryPath, treeWarePackageName)
+        val treeWarePackageName = getMetaModelPackageName(leaderMeta1)
+        metaModelPackage = EncodeKotlinPackage(kotlinDirectoryPath, treeWarePackageName)
         rootKotlinType = getEntityInfoKotlinType(getEntityInfoMeta(leaderMeta1, "root"))
         val kotlinMetaModelConstant = writeKotlinMetaModelFile(leaderMeta1)
         dslMarkerName = getDslMarkerName(leaderMeta1)
@@ -82,7 +82,7 @@ class EncodeKotlinMetaModelVisitor(
         val entityMutableClassName = "Mutable$entityInterfaceName"
         entityMutableClassFile = EncodeKotlinElementFile(elementPackage, entityMutableClassName)
         entityMutableClassFile.import("org.treeWare.model.core.*")
-        entityMutableClassFile.import(dslMarkerName)
+        entityMutableClassFile.import("${metaModelPackage.name}.$dslMarkerName")
         entityMutableClassFile.appendLine(
             """
             |@$dslMarkerName
@@ -197,7 +197,7 @@ class EncodeKotlinMetaModelVisitor(
     private fun writeKotlinMetaModelFile(meta: EntityModel): String {
         val metaModelName = getMetaModelName(meta)
         val fileName = metaModelName.snakeCaseToUpperCamelCase() + "MetaModel"
-        val file = EncodeKotlinElementFile(mainModelPackage, fileName)
+        val file = EncodeKotlinElementFile(metaModelPackage, fileName)
         file.import("org.treeWare.metaModel.newMetaModelFromJsonFiles")
         file.import("org.treeWare.model.core.*")
 
@@ -231,7 +231,7 @@ class EncodeKotlinMetaModelVisitor(
     }
 
     private fun writeKotlinDslMarkerFile() {
-        val file = EncodeKotlinElementFile(mainModelPackage, dslMarkerName)
+        val file = EncodeKotlinElementFile(metaModelPackage, dslMarkerName)
         file.appendLine("@DslMarker")
         file.appendLine("annotation class $dslMarkerName")
         file.write()
@@ -240,9 +240,8 @@ class EncodeKotlinMetaModelVisitor(
     private fun writeKotlinDslModelFile(meta: EntityModel, kotlinMetaModelConstant: String) {
         val metaModelName = getMetaModelName(meta)
         val fileName = metaModelName.snakeCaseToUpperCamelCase()
-        val file = EncodeKotlinElementFile(mainModelPackage, fileName)
+        val file = EncodeKotlinElementFile(metaModelPackage, fileName)
         file.import("org.treeWare.metaModel.getResolvedRootMeta")
-        file.import(dslMarkerName)
         file.appendLine(
             """
             |@$dslMarkerName
@@ -561,9 +560,7 @@ class EncodeKotlinMetaModelVisitor(
 
     // MainModel state.
     private lateinit var dslMarkerName: String
-    private lateinit var mainModelPackage: EncodeKotlinPackage
-    private lateinit var mainModelInterfaceFile: EncodeKotlinElementFile
-    private lateinit var mainModelMutableClassFile: EncodeKotlinElementFile
+    private lateinit var metaModelPackage: EncodeKotlinPackage
 
     // Package state.
     private lateinit var elementPackage: EncodeKotlinPackage
