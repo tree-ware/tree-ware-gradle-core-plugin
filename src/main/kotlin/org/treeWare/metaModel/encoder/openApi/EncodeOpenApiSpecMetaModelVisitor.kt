@@ -11,6 +11,8 @@ import org.treeWare.model.traversal.TraversalAction
 class EncodeOpenApiSpecMetaModelVisitor(
     private val encoder: WireFormatEncoder
 ) : Leader1MetaModelVisitor<TraversalAction> {
+    private lateinit var rootEntityOpenApiName: String
+
     override fun visitMetaModel(leaderMeta1: EntityModel): TraversalAction {
         encoder.encodeObjectStart(null)
         encoder.encodeStringField("openapi", "3.0.1")
@@ -109,9 +111,24 @@ class EncodeOpenApiSpecMetaModelVisitor(
             FieldType.PASSWORD1WAY -> encoder.encodeStringField("\$ref", "#/components/schemas/password1way")
             FieldType.PASSWORD2WAY -> encoder.encodeStringField("\$ref", "#/components/schemas/password2way")
             FieldType.ALIAS -> throw IllegalStateException("Aliases are not yet supported")
-            FieldType.ENUMERATION -> encoder.encodeStringField("type", "string") // TODO
-            FieldType.ASSOCIATION -> encoder.encodeStringField("type", "string") // TODO
-            FieldType.COMPOSITION -> encoder.encodeStringField("type", "string") // TODO
+            FieldType.ENUMERATION -> {
+                val resolved = getMetaModelResolved(leaderFieldMeta1)
+                    ?: throw IllegalStateException("Meta-model not resolved")
+                val enumerationMeta = resolved.enumerationMeta
+                    ?: throw IllegalStateException("Enumeration-meta not resolved")
+                val openApiName = getOpenApiName(enumerationMeta)
+                encoder.encodeStringField("\$ref", "#/components/schemas/$openApiName")
+            }
+            FieldType.ASSOCIATION -> encoder.encodeStringField("\$ref", "#/components/schemas/$rootEntityOpenApiName")
+            FieldType.COMPOSITION -> {
+                // TODO handle multiplicity
+                val resolved = getMetaModelResolved(leaderFieldMeta1)
+                    ?: throw IllegalStateException("Meta-model not resolved")
+                val compositionMeta = resolved.compositionMeta
+                    ?: throw IllegalStateException("Composition-meta not resolved")
+                val openApiName = getOpenApiName(compositionMeta)
+                encoder.encodeStringField("\$ref", "#/components/schemas/$openApiName")
+            }
             null -> throw IllegalStateException("Null field type")
         }
         return TraversalAction.CONTINUE
@@ -134,7 +151,7 @@ class EncodeOpenApiSpecMetaModelVisitor(
         encoder.encodeObjectStart("paths")
         val metaModelName = getMetaModelName(leaderMeta1)
         val rootEntityMeta = getResolvedRootMeta(leaderMeta1)
-        val rootEntityOpenApiName = getOpenApiName(rootEntityMeta)
+        rootEntityOpenApiName = getOpenApiName(rootEntityMeta)
         encodeGetPath(metaModelName, rootEntityOpenApiName)
         encodeSetPath(metaModelName, rootEntityOpenApiName)
         encoder.encodeObjectEnd()
