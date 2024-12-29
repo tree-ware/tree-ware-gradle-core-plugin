@@ -8,6 +8,8 @@ import org.treeWare.model.core.getMetaModelResolved
 import org.treeWare.model.encoder.WireFormatEncoder
 import org.treeWare.model.traversal.TraversalAction
 
+// TODO encode aux fields
+
 class EncodeOpenApiSpecMetaModelVisitor(
     private val encoder: WireFormatEncoder
 ) : Leader1MetaModelVisitor<TraversalAction> {
@@ -121,13 +123,20 @@ class EncodeOpenApiSpecMetaModelVisitor(
             }
             FieldType.ASSOCIATION -> encoder.encodeStringField("\$ref", "#/components/schemas/$rootEntityOpenApiName")
             FieldType.COMPOSITION -> {
-                // TODO handle multiplicity
+                val isSet = getMultiplicityMeta(leaderFieldMeta1) == Multiplicity.SET
                 val resolved = getMetaModelResolved(leaderFieldMeta1)
                     ?: throw IllegalStateException("Meta-model not resolved")
                 val compositionMeta = resolved.compositionMeta
                     ?: throw IllegalStateException("Composition-meta not resolved")
                 val openApiName = getOpenApiName(compositionMeta)
+                if (isSet) {
+                    encoder.encodeStringField("type", "array")
+                    encoder.encodeObjectStart("items")
+                }
                 encoder.encodeStringField("\$ref", "#/components/schemas/$openApiName")
+                if (isSet) {
+                    encoder.encodeObjectEnd()
+                }
             }
             null -> throw IllegalStateException("Null field type")
         }
