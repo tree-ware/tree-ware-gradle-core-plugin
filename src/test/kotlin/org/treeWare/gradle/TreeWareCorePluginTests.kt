@@ -7,7 +7,7 @@ import kotlin.test.assertNotNull
 
 class TreeWareCorePluginTests {
     @Test
-    fun plugin_must_register_generate_diagrams_task() {
+    fun plugin_must_register_tasks() {
         // Build a project.
         // TODO(deepak-nulu): use Gradle TestKit with a build file that includes Java/Kotlin plugins and sourceSets.
         val project: Project = ProjectBuilder.builder().build()
@@ -22,5 +22,9 @@ class TreeWareCorePluginTests {
         // Verify that the plugin registered the "generateKotlin" umbrella task.
         assertNotNull(project.tasks.findByName("generateKotlin"))
         // TODO(deepak-nulu): Verify that the plugin registered the "generateKotlin<SourceSet>" tasks.
+
+        // Verify that the plugin registered the "generateOpenApiSpec" umbrella task.
+        assertNotNull(project.tasks.findByName("generateOpenApiSpec"))
+        // TODO(deepak-nulu): Verify that the plugin registered the "generateOpenApiSpec<SourceSet>" tasks.
     }
 }

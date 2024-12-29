@@ -18,3 +18,6 @@ fun getMetaModelSourceOutputDirectory(project: Project, sourceSetName: String): 
 
 fun getMetaModelKotlinOutputDirectory(project: Project, sourceSetName: String): Provider<Directory> =
     getMetaModelSourceOutputDirectory(project, sourceSetName).map { it.dir("kotlin") }
+
+fun getMetaModelOpenApiSpecOutputDirectory(project: Project, sourceSetName: String): Provider<Directory> =
+    project.layout.buildDirectory.dir("$GENERATED_DOC_DIRECTORY/$sourceSetName")

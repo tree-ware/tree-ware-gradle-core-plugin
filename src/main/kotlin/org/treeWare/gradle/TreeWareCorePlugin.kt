@@ -38,6 +38,16 @@ class TreeWareCorePlugin : Plugin<Project> {
                 compileTask.dependsOn(generateTask)
             }
         }
+
+        // TODO: move generateOpenApiSpec into a separate server plugin since it is not a core feature. Or drop it
+        //       completely once the tree-ware API navigator is ready.
+        registerTasks(
+            project, "generateOpenApiSpec", GenerateOpenApiSpecTask::class.java, null
+        ) { task, sourceSetName, resources ->
+            val outputDirectory = getMetaModelOpenApiSpecOutputDirectory(project, sourceSetName)
+            task.resources.set(resources)
+            task.outputDirectory.set(outputDirectory)
+        }
     }
 
     private fun <T : Task> registerTasks(
