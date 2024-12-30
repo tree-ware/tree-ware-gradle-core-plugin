@@ -8,8 +8,6 @@ import org.treeWare.model.core.getMetaModelResolved
 import org.treeWare.model.encoder.WireFormatEncoder
 import org.treeWare.model.traversal.TraversalAction
 
-// TODO encode aux fields
-
 class EncodeOpenApiSpecMetaModelVisitor(
     private val encoder: WireFormatEncoder
 ) : Leader1MetaModelVisitor<TraversalAction> {
@@ -21,6 +19,7 @@ class EncodeOpenApiSpecMetaModelVisitor(
         encodeInfo(leaderMeta1)
         encodePaths(leaderMeta1)
         encodeSchemasStart()
+        encodeSetAuxEnum()
         return TraversalAction.CONTINUE
     }
 
@@ -79,6 +78,7 @@ class EncodeOpenApiSpecMetaModelVisitor(
         encoder.encodeObjectStart(openApiName)
         encoder.encodeStringField("type", "object")
         encoder.encodeObjectStart("properties")
+        encodeSetAuxField()
         return TraversalAction.CONTINUE
     }
 
@@ -89,6 +89,7 @@ class EncodeOpenApiSpecMetaModelVisitor(
 
     override fun visitFieldMeta(leaderFieldMeta1: EntityModel): TraversalAction {
         val name = getMetaName(leaderFieldMeta1)
+        encodeSetAuxField(name)
         encoder.encodeObjectStart(name)
         val info = getMetaInfo(leaderFieldMeta1)
         if (info != null) encoder.encodeStringField("description", info)
@@ -228,6 +229,26 @@ class EncodeOpenApiSpecMetaModelVisitor(
         encodePassword1way()
         encodePassword2way()
         encoder.encodeObjectEnd()
+        encoder.encodeObjectEnd()
+    }
+
+    private fun encodeSetAuxEnum() {
+        encoder.encodeObjectStart("set_aux")
+        encoder.encodeStringField("type", "string")
+        encoder.encodeStringField("description", "For use with set requests only")
+        encoder.encodeListStart("enum")
+        encoder.encodeStringField("", "create")
+        encoder.encodeStringField("", "update")
+        encoder.encodeStringField("", "delete")
+        encoder.encodeListEnd()
+        encoder.encodeObjectEnd()
+    }
+
+    private fun encodeSetAuxField(fieldName: String? = null) {
+        val setAuxFieldName = if (fieldName == null) "set_" else "${fieldName}__set_"
+        encoder.encodeObjectStart(setAuxFieldName)
+        encoder.encodeStringField("description", "For use with set requests only")
+        encoder.encodeStringField("\$ref", "#/components/schemas/set_aux")
         encoder.encodeObjectEnd()
     }
 

@@ -1,7 +1,7 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 group = "org.tree-ware.tree-ware-gradle-core-plugin"
-version = "0.3.1.0-SNAPSHOT"
+version = "0.3.1.0"
 
 plugins {
     kotlin("jvm") version "1.7.0"
