@@ -1,7 +1,7 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 group = "org.tree-ware.tree-ware-gradle-core-plugin"
-version = "0.4.0.1"
+version = "0.5.0.0"
 
 plugins {
     kotlin("jvm") version "2.1.10"
@@ -19,7 +19,7 @@ repositories {
 dependencies {
     implementation(libs.treeWareKotlinCore)
     implementation(kotlin("stdlib"))
-    implementation("org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.20")
+    implementation("org.jetbrains.kotlin:kotlin-gradle-plugin:2.2.0")
 
     testImplementation(kotlin("test"))
 }

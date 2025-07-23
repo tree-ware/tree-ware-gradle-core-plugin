@@ -11,7 +11,7 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 private const val TREE_WARE_TASK_GROUP = "tree-ware"
 
 typealias ConfigureSources = (project: Project, sourceSetName: String, sources: SourceDirectorySet) -> Unit
-typealias ConfigureTask<T> = (task: T, sourceSetName: String, resources: SourceDirectorySet) -> Unit
+typealias ConfigureTask<T> = (task: T, sourceSetName: String, resources: List<String>) -> Unit
 
 class TreeWareCorePlugin : Plugin<Project> {
     override fun apply(project: Project) {
@@ -87,9 +87,10 @@ class TreeWareCorePlugin : Plugin<Project> {
         umbrellaTask: Task,
         project: Project,
         sourceSetName: String,
-        resources: SourceDirectorySet
+        resourcesDirectorySet: SourceDirectorySet
     ) {
         val taskSuffix = sourceSetName.replaceFirstChar { it.uppercase() }
+        val resources = getMetaModelFilePaths(resourcesDirectorySet)
         val task = project.tasks.register("$taskName$taskSuffix", taskClass) {
             it.group = TREE_WARE_TASK_GROUP
             configureTask(it, sourceSetName, resources)

@@ -3,12 +3,11 @@ package org.treeWare.gradle
 import okio.FileSystem
 import org.gradle.api.file.SourceDirectorySet
 import org.gradle.api.logging.Logger
-import org.gradle.api.provider.Property
 import org.treeWare.metaModel.newMetaModelFromJsonFiles
 import org.treeWare.model.core.EntityModel
 
-fun getMetaModelFilePaths(resources: Property<SourceDirectorySet>): List<String> =
-    resources.get().filter {
+fun getMetaModelFilePaths(resources: SourceDirectorySet): List<String> =
+    resources.filter {
         it.parent.endsWith(SOURCE_SET_META_MODEL_DIRECTORY_PATH) && it.extension == SOURCE_SET_META_MODEL_FILE_EXTENSION
     }.files.map { it.path }
 
