@@ -15,6 +15,10 @@ class TreeWareCorePluginTests {
         // Apply the plugin-under-test.
         project.pluginManager.apply("org.tree-ware.core")
 
+        // Verify that the plugin registered the "generate" umbrella task.
+        assertNotNull(project.tasks.findByName("generate"))
+        // TODO(deepak-nulu): Verify that the plugin registered the "generate<SourceSet>" tasks.
+
         // Verify that the plugin registered the "generateDiagrams" umbrella task.
         assertNotNull(project.tasks.findByName("generateDiagrams"))
         // TODO(deepak-nulu): Verify that the plugin registered the "generateDiagrams<SourceSet>" tasks.

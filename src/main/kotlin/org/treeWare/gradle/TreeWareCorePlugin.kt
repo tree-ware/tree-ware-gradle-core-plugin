@@ -15,8 +15,11 @@ typealias ConfigureTask<T> = (task: T, sourceSetName: String, resources: List<St
 
 class TreeWareCorePlugin : Plugin<Project> {
     override fun apply(project: Project) {
+        // Create the root "generate" task. All other tree-ware tasks depend on this task directly or indirectly.
+        val rootTask = project.tasks.create("generate") { it.group = TREE_WARE_TASK_GROUP }
+
         registerTasks(
-            project, "generateDiagrams", GenerateDiagramsTask::class.java, null
+            project, rootTask, "generateDiagrams", GenerateDiagramsTask::class.java, null
         ) { task, sourceSetName, resources ->
             val outputDirectory = getMetaModelDiagramsOutputDirectory(project, sourceSetName)
             task.resources.set(resources)
@@ -24,7 +27,7 @@ class TreeWareCorePlugin : Plugin<Project> {
         }
 
         registerTasks(
-            project, "generateKotlin", GenerateKotlinTask::class.java, ::addGeneratedKotlinToSourceSet
+            project, rootTask, "generateKotlin", GenerateKotlinTask::class.java, ::addGeneratedKotlinToSourceSet
         ) { task, sourceSetName, resources ->
             val outputDirectory = getMetaModelKotlinOutputDirectory(project, sourceSetName)
             task.resources.set(resources)
@@ -42,7 +45,7 @@ class TreeWareCorePlugin : Plugin<Project> {
         // TODO: move generateOpenApiSpec into a separate server plugin since it is not a core feature. Or drop it
         //       completely once the tree-ware API navigator is ready.
         registerTasks(
-            project, "generateOpenApiSpec", GenerateOpenApiSpecTask::class.java, null
+            project, rootTask, "generateOpenApiSpec", GenerateOpenApiSpecTask::class.java, null
         ) { task, sourceSetName, resources ->
             val outputDirectory = getMetaModelOpenApiSpecOutputDirectory(project, sourceSetName)
             task.resources.set(resources)
@@ -52,6 +55,7 @@ class TreeWareCorePlugin : Plugin<Project> {
 
     private fun <T : Task> registerTasks(
         project: Project,
+        rootTask: Task,
         taskName: String,
         taskClass: Class<T>,
         configureSources: ConfigureSources?,
@@ -61,6 +65,7 @@ class TreeWareCorePlugin : Plugin<Project> {
         // TaskProvider. This allows the dependsOn() method to be called on the umbrella task to make it depend on the
         // sourceSet-specific tasks (which are registered rather than created).
         val umbrellaTask = project.tasks.create(taskName) { it.group = TREE_WARE_TASK_GROUP }
+        rootTask.dependsOn(umbrellaTask)
 
         val kotlinExtension = project.extensions.findByName("kotlin") as? KotlinMultiplatformExtension
         if (kotlinExtension != null) {
