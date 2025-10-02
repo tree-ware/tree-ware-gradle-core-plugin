@@ -1,5 +1,6 @@
 package org.treeWare.metaModel.encoder.kotlin
 
+import org.treeWare.gradle.MetaModelAuxConfiguration
 import org.treeWare.metaModel.*
 import org.treeWare.metaModel.encoder.util.snakeCaseToLowerCamelCase
 import org.treeWare.metaModel.encoder.util.snakeCaseToUpperCamelCase
@@ -11,6 +12,7 @@ import org.treeWare.model.traversal.TraversalAction
 
 class EncodeKotlinMetaModelVisitor(
     private val metaModelFilePaths: List<String>,
+    private val metaModelAuxConfiguration: MetaModelAuxConfiguration,
     private val kotlinDirectoryPath: String
 ) : Leader1MetaModelVisitor<TraversalAction> {
 
@@ -219,7 +221,13 @@ class EncodeKotlinMetaModelVisitor(
         val kotlinRootEntityFactory = "${metaModelNameLowerCamelCase}RootEntityFactory"
         val kotlinMetaModelNewFunction = "new$metaModelNameUpperCamelCase"
         file.append("fun ").append(kotlinMetaModelNewFunction).appendLine("(hasher: Hasher?, cipher: Cipher?): ValidatedMetaModel = newMetaModelFromJsonFiles(")
-        file.append("    ").append(metaModelFilesConstant).appendLine(", false, hasher, cipher, ::$kotlinRootEntityFactory, emptyList(), true")
+        file.append("    ").append(metaModelFilesConstant).appendLine(",")
+        file.appendLine("    false,")
+        file.appendLine("    hasher,")
+        file.appendLine("    cipher,")
+        file.append("    ::").append(kotlinRootEntityFactory).appendLine(",")
+        writeKotlinMetaModelAuxList(file)
+        file.appendLine("    true")
         file.appendLine(")")
         file.appendLine("")
 
@@ -237,6 +245,17 @@ class EncodeKotlinMetaModelVisitor(
 
         file.write()
         return kotlinRootEntityMeta
+    }
+
+    private fun writeKotlinMetaModelAuxList(file: EncodeKotlinElementFile) {
+        val auxClasses = metaModelAuxConfiguration.auxClasses.get()
+        if (auxClasses.isEmpty()) {
+            file.appendLine("    emptyList(),")
+            return
+        }
+        file.appendLine("    listOf(")
+        auxClasses.forEach { file.appendLine("        $it(),") }
+        file.appendLine("    ),")
     }
 
     private fun writeKotlinDslMarkerFile() {

@@ -15,6 +15,8 @@ typealias ConfigureTask<T> = (task: T, sourceSetName: String, resources: List<St
 
 class TreeWareCorePlugin : Plugin<Project> {
     override fun apply(project: Project) {
+        val extension = project.extensions.create("treeWare", TreeWareCorePluginExtension::class.java)
+
         // Create the root "generate" task. All other tree-ware tasks depend on this task directly or indirectly.
         val rootTask = project.tasks.create("generate") { it.group = TREE_WARE_TASK_GROUP }
 
@@ -31,6 +33,7 @@ class TreeWareCorePlugin : Plugin<Project> {
         ) { task, sourceSetName, resources ->
             val outputDirectory = getMetaModelKotlinOutputDirectory(project, sourceSetName)
             task.resources.set(resources)
+            task.metaModelAuxConfiguration.set(extension.metaModelAuxConfiguration)
             task.outputDirectory.set(outputDirectory)
         }
 
