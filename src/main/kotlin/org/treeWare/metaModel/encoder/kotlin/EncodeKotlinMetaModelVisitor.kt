@@ -2,8 +2,8 @@ package org.treeWare.metaModel.encoder.kotlin
 
 import org.treeWare.gradle.MetaModelAuxConfiguration
 import org.treeWare.metaModel.*
-import org.treeWare.metaModel.encoder.util.snakeCaseToLowerCamelCase
-import org.treeWare.metaModel.encoder.util.snakeCaseToUpperCamelCase
+import org.treeWare.util.snakeCaseToLowerCamelCase
+import org.treeWare.util.snakeCaseToUpperCamelCase
 import org.treeWare.metaModel.traversal.Leader1MetaModelVisitor
 import org.treeWare.model.core.EntityModel
 import org.treeWare.model.core.getMetaModelResolved
@@ -24,10 +24,10 @@ class EncodeKotlinMetaModelVisitor(
         val treeWarePackageName = getMetaModelPackageName(leaderMeta1)
         metaModelPackage = EncodeKotlinPackage(kotlinDirectoryPath, treeWarePackageName)
         rootKotlinType = getEntityInfoKotlinType(getEntityInfoMeta(leaderMeta1, "root"))
-        val kotlinRootEntityMeta = writeKotlinMetaModelFile(leaderMeta1)
+        writeKotlinMetaModelInfoFile(leaderMeta1)
         dslMarkerName = getDslMarkerName(leaderMeta1)
         writeKotlinDslMarkerFile()
-        writeKotlinDslModelFile(leaderMeta1, kotlinRootEntityMeta)
+        writeKotlinDslModelFile(leaderMeta1)
         return TraversalAction.CONTINUE
     }
 
@@ -196,66 +196,64 @@ class EncodeKotlinMetaModelVisitor(
         return metaModelName.snakeCaseToUpperCamelCase() + "DslMarker"
     }
 
-    private fun writeKotlinMetaModelFile(meta: EntityModel): String {
+    private fun writeKotlinMetaModelInfoFile(meta: EntityModel) {
         val metaModelName = getMetaModelName(meta)
-        val metaModelNameLowerCamelCase = metaModelName.snakeCaseToLowerCamelCase()
         val metaModelNameUpperCamelCase = metaModelName.snakeCaseToUpperCamelCase()
 
-        val fileName = metaModelNameUpperCamelCase + "MetaModel"
-        val file = EncodeKotlinElementFile(metaModelPackage, fileName)
+        val objectName = metaModelNameUpperCamelCase + "MetaModelInfo"
+        val file = EncodeKotlinElementFile(metaModelPackage, objectName)
         file.import("org.treeWare.metaModel.getResolvedRootMeta")
+        file.import("org.treeWare.metaModel.MetaModelInfo")
         file.import("org.treeWare.metaModel.newMetaModelFromJsonFiles")
         file.import("org.treeWare.metaModel.ValidatedMetaModel")
         file.import("org.treeWare.model.core.*")
 
-        val metaModelFilesConstant = metaModelName.uppercase() + "_META_MODEL_FILES"
-        file.append("val ").append(metaModelFilesConstant).appendLine(" = listOf(")
+        file.append("object ").append(objectName).appendLine(" : MetaModelInfo {")
+
+        file.appendLine("    override val metaModelFiles = listOf(")
         this.metaModelFilePaths.sorted().forEach { absolutePath ->
             val splits = absolutePath.split("resources/")
             val relativePath = if (splits.size > 1) splits[1] else splits[0]
-            file.append("    \"").append(relativePath).appendLine("\",")
+            file.append("        \"").append(relativePath).appendLine("\",")
         }
-        file.appendLine(")")
+        file.appendLine("    )")
         file.appendLine("")
 
-        val kotlinRootEntityFactory = "${metaModelNameLowerCamelCase}RootEntityFactory"
         val kotlinMetaModelNewFunction = "new$metaModelNameUpperCamelCase"
-        file.append("fun ").append(kotlinMetaModelNewFunction).appendLine("(hasher: Hasher?, cipher: Cipher?): ValidatedMetaModel = newMetaModelFromJsonFiles(")
-        file.append("    ").append(metaModelFilesConstant).appendLine(",")
-        file.appendLine("    false,")
-        file.appendLine("    hasher,")
-        file.appendLine("    cipher,")
-        file.append("    ::").append(kotlinRootEntityFactory).appendLine(",")
+        file.append("    fun ").append(kotlinMetaModelNewFunction).appendLine("(hasher: Hasher?, cipher: Cipher?): ValidatedMetaModel = newMetaModelFromJsonFiles(")
+        file.appendLine("        metaModelFiles,")
+        file.appendLine("        false,")
+        file.appendLine("        hasher,")
+        file.appendLine("        cipher,")
+        file.append("        ").append(objectName).appendLine("::rootEntityFactory,")
         writeKotlinMetaModelAuxList(file)
-        file.appendLine("    true")
-        file.appendLine(")")
+        file.appendLine("        true")
+        file.appendLine("    )")
         file.appendLine("")
 
-        val kotlinMetaModelConstant = "${metaModelNameLowerCamelCase}MetaModel"
-        file.append("val ").append(kotlinMetaModelConstant).append(" = ").append(kotlinMetaModelNewFunction).appendLine("(null, null).metaModel")
-        file.appendLine("    ?: throw IllegalStateException(\"Meta-model has validation errors\")")
+        file.append("    override val metaModel = ").append(kotlinMetaModelNewFunction).appendLine("(null, null).metaModel")
+        file.appendLine("        ?: throw IllegalStateException(\"Meta-model has validation errors\")")
         file.appendLine("")
 
-        val kotlinRootEntityMeta = "${metaModelNameLowerCamelCase}RootEntityMeta"
-        file.append("val ").append(kotlinRootEntityMeta).append(" = getResolvedRootMeta(").append(kotlinMetaModelConstant).appendLine(")")
+        file.appendLine("    val rootEntityMeta = getResolvedRootMeta(metaModel)")
         file.appendLine("")
 
-        file.append("fun ").append(kotlinRootEntityFactory).appendLine("(parent: MutableFieldModel?) =")
-        file.append("    ${rootKotlinType.mutableClassType}(").append(kotlinRootEntityMeta).append(", parent)")
+        file.appendLine("    override fun rootEntityFactory(parent: MutableFieldModel?) =")
+        file.appendLine("        ${rootKotlinType.mutableClassType}(rootEntityMeta, parent)")
 
+        file.append("}")
         file.write()
-        return kotlinRootEntityMeta
     }
 
     private fun writeKotlinMetaModelAuxList(file: EncodeKotlinElementFile) {
         val auxClasses = metaModelAuxConfiguration.auxClasses.get()
         if (auxClasses.isEmpty()) {
-            file.appendLine("    emptyList(),")
+            file.appendLine("        emptyList(),")
             return
         }
-        file.appendLine("    listOf(")
-        auxClasses.forEach { file.appendLine("        $it(),") }
-        file.appendLine("    ),")
+        file.appendLine("        listOf(")
+        auxClasses.forEach { file.appendLine("            $it(),") }
+        file.appendLine("        ),")
     }
 
     private fun writeKotlinDslMarkerFile() {
@@ -265,7 +263,7 @@ class EncodeKotlinMetaModelVisitor(
         file.write()
     }
 
-    private fun writeKotlinDslModelFile(meta: EntityModel, kotlinRootEntityMeta: String) {
+    private fun writeKotlinDslModelFile(meta: EntityModel) {
         val metaModelName = getMetaModelName(meta)
         val fileName = metaModelName.snakeCaseToUpperCamelCase()
         val file = EncodeKotlinElementFile(metaModelPackage, fileName)
@@ -273,7 +271,7 @@ class EncodeKotlinMetaModelVisitor(
             """
             |@$dslMarkerName
             |fun ${metaModelName.snakeCaseToLowerCamelCase()}(configure: ${rootKotlinType.mutableClassType}.() -> Unit): ${rootKotlinType.mutableClassType} {
-            |    val root = ${rootKotlinType.mutableClassType}($kotlinRootEntityMeta, null)
+            |    val root = ${rootKotlinType.mutableClassType}(${metaModelName.snakeCaseToUpperCamelCase()}MetaModelInfo.rootEntityMeta, null)
             |    root.configure()
             |    return root
             |}

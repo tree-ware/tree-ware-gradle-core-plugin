@@ -2,7 +2,7 @@ package org.treeWare.metaModel.encoder.kotlin
 
 import okio.FileSystem
 import okio.Path.Companion.toPath
-import org.treeWare.metaModel.encoder.util.snakeCaseToLowerCamelCase
+import org.treeWare.util.snakeCaseToLowerCamelCase
 
 class EncodeKotlinPackage(kotlinDirectoryPath: String, treeWarePackageName: String) {
     val name: String = treeWarePackageName.treeWareToKotlinPackageName()
