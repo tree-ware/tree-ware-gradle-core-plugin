@@ -393,11 +393,8 @@ class EncodeKotlinMetaModelVisitor(
             |            return primitive.value as ${fieldKotlinType.mutableClassType}
             |        }
             |        set(newValue) {
-            |            if (newValue == null) {
-            |                this.getField("$fieldNameTreeWare")?.detachFromParent()
-            |                return
-            |            }
             |            val singleField = this.getOrNewField("$fieldNameTreeWare") as MutableSingleFieldModel
+            |            if (newValue == null) return
             |            val primitive = singleField.getOrNewValue() as MutablePrimitiveModel
             |            primitive.setValue(newValue.toString())
             |        }
@@ -440,11 +437,8 @@ class EncodeKotlinMetaModelVisitor(
             |            }
             |        }
             |        set(newValue) {
-            |            if (newValue == null) {
-            |                this.getField("$fieldNameTreeWare")?.detachFromParent()
-            |                return
-            |            }
             |            val singleField = this.getOrNewField("$fieldNameTreeWare") as MutableSingleFieldModel
+            |            if (newValue == null) return
             |            val enumeration = singleField.getOrNewValue() as MutableEnumerationModel
             |            enumeration.setValue(newValue.name.lowercase())
             |        }
