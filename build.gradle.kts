@@ -1,5 +1,5 @@
 group = "org.tree-ware.tree-ware-gradle-core-plugin"
-version = "0.6.0.0"
+version = "0.6.1.0"
 
 plugins {
     kotlin("jvm") version "2.1.10"
