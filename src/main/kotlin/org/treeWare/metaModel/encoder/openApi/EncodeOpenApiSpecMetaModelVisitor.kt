@@ -46,7 +46,7 @@ class EncodeOpenApiSpecMetaModelVisitor(
 
     override fun visitPackageMeta(leaderPackageMeta1: EntityModel): TraversalAction {
         // Packages have no explicit presence in an OpenAPI spec. But tree-ware uses it to fully qualify entity names
-        // in components/schemas section of the OpenAPI spec.
+        // in the components/schemas section of the OpenAPI spec.
         return TraversalAction.CONTINUE
     }
 
@@ -93,7 +93,8 @@ class EncodeOpenApiSpecMetaModelVisitor(
         encoder.encodeObjectStart(name)
         val info = getMetaInfo(leaderFieldMeta1)
         if (info != null) encoder.encodeStringField("description", info)
-        when (getFieldTypeMeta(leaderFieldMeta1)) {
+        val fieldType = getFieldTypeMeta(leaderFieldMeta1)
+        when (fieldType) {
             FieldType.BOOLEAN -> encoder.encodeStringField("type", "boolean")
             FieldType.UINT8 -> encoder.encodeStringField("type", "integer")
             FieldType.UINT16 -> encoder.encodeStringField("type", "integer")
@@ -141,6 +142,7 @@ class EncodeOpenApiSpecMetaModelVisitor(
             }
             null -> throw IllegalStateException("Null field type")
         }
+        if (fieldType != FieldType.COMPOSITION) encoder.encodeBooleanField("nullable", true)
         return TraversalAction.CONTINUE
     }
 
